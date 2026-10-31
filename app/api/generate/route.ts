@@ -1,24 +1,27 @@
 import { requireProfessor } from "@/lib/auth";
 import { extract } from "@/lib/extract";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const deny = await requireProfessor();
   if (deny) return deny;
-  const file = (await req.formData()).get("pdf");
+  const form = await req.formData();
+  const file = form.get("pdf");
   if (!(file instanceof File) || file.size === 0) return Response.json({ error: "Choose a PDF to upload." }, { status: 400 });
-  let text: string;
+  let pages: string[];
   try {
-    // Import the implementation directly: pdf-parse's index runs a debug read on import.
-    const pdf = (await import("pdf-parse/lib/pdf-parse.js")).default as (b: Buffer) => Promise<{ text: string }>;
-    text = (await pdf(Buffer.from(await file.arrayBuffer()))).text;
+    const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()));
+    pages = (await extractText(pdf, { mergePages: false })).text;
   } catch {
-    return Response.json({ error: "Could not read that file as a PDF." }, { status: 422 });
+    return Response.json({ error: "Could not read that PDF. Try another file." }, { status: 400 });
   }
   try {
-    return Response.json(await extract(text));
+    return Response.json(await extract(pages));
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 422 });
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: `AI generation failed: ${message}. Check ANTHROPIC_API_KEY and try again.` }, { status: 502 });
   }
 }

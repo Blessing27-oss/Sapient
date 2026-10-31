@@ -36,12 +36,17 @@ function Workspace() {
     setBusy(true); setErr("");
     const fd = new FormData();
     if (file) fd.append("pdf", file);
-    const r = await fetch("/api/generate", { method: "POST", body: fd });
-    if (r.status === 401) { location.reload(); return; }
-    const d = await r.json();
-    setBusy(false);
-    if (!r.ok) return setErr(d.error ?? "Something went wrong reading that PDF.");
-    setDraft(d); setSel(d.concepts[0]?.id ?? null);
+    try {
+      const r = await fetch("/api/generate", { method: "POST", body: fd });
+      if (r.status === 401) { location.reload(); return; }
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Could not generate material.");
+      setDraft(d); setSel(d.concepts[0]?.id ?? null);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Could not generate material.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (code && draft)
@@ -69,7 +74,7 @@ function Workspace() {
             <span className="mt-1 text-sm text-stone-500">Lecture notes or slides · text-based PDFs work best</span>
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
           </label>
-          {err && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
+          {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
         </div>
 
         <div className="card space-y-5">
@@ -170,6 +175,7 @@ function Workspace() {
               </>
             ) : sc ? (
               <>
+                {sc.sourcePage && <p className="text-xs text-stone-500">Source: page {sc.sourcePage}</p>}
                 <input className="input font-semibold" value={sc.name} onChange={(e) => setConcept(sc.id, { name: e.target.value })} />
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sc.verified} onChange={(e) => setConcept(sc.id, { verified: e.target.checked })} /> I’ve verified this concept</label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!sc.foundational} onChange={(e) => setConcept(sc.id, { foundational: e.target.checked, importance: e.target.checked ? 1 : sc.importance })} /> Foundational</label>
