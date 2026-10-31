@@ -110,3 +110,53 @@ export function fallbackTopicMap(concepts: Concept[], edges: Edge[]): TopicMap {
     }],
   };
 }
+
+// ---------- Editing (professor review). Node ids are global: the same id in several sections is one idea. ----------
+
+const mapSections = (map: TopicMap, sectionId: string, fn: (s: MapSection) => MapSection): TopicMap =>
+  ({ ...map, sections: map.sections.map((s) => (s.id === sectionId ? fn(s) : s)) });
+
+export function addMapNode(map: TopicMap, sectionId: string, node: MapNode): TopicMap {
+  return mapSections(map, sectionId, (s) => ({ ...s, nodes: [...s.nodes, node] }));
+}
+
+export function updateMapNode(map: TopicMap, nodeId: string, patch: Partial<Omit<MapNode, "id">>): TopicMap {
+  return { ...map, sections: map.sections.map((s) => ({ ...s, nodes: s.nodes.map((n) => (n.id === nodeId ? { ...n, ...patch } : n)) })) };
+}
+
+// Removes the idea everywhere: every copy, every arrow touching it, and its cross-graph links.
+export function removeMapNode(map: TopicMap, nodeId: string): TopicMap {
+  const touches = (e: MapEdge) => e.source === nodeId || e.target === nodeId;
+  return {
+    ...map,
+    sections: map.sections.map((s) => ({ ...s, nodes: s.nodes.filter((n) => n.id !== nodeId), edges: s.edges.filter((e) => !touches(e)) })),
+    links: map.links.filter((e) => !touches(e)),
+  };
+}
+
+// Returns the map unchanged when the arrow would duplicate one (either direction) or loop.
+export function connectMapNodes(map: TopicMap, sectionId: string, source: string, target: string, style: MapEdge["style"] = "solid"): TopicMap {
+  const s = map.sections.find((x) => x.id === sectionId);
+  if (!s || source === target || s.edges.some((e) => (e.source === source && e.target === target) || (e.source === target && e.target === source))) return map;
+  return mapSections(map, sectionId, (x) => ({ ...x, edges: [...x.edges, { source, target, style }] }));
+}
+
+export function updateMapEdge(map: TopicMap, sectionId: string, index: number, patch: Partial<MapEdge>): TopicMap {
+  return mapSections(map, sectionId, (s) => ({ ...s, edges: s.edges.map((e, i) => (i === index ? { ...e, ...patch } : e)) }));
+}
+
+export function removeMapEdge(map: TopicMap, sectionId: string, index: number): TopicMap {
+  return mapSections(map, sectionId, (s) => ({ ...s, edges: s.edges.filter((_, i) => i !== index) }));
+}
+
+// A link between ideas in different graphs; refused when the two already share a graph (that is an ordinary arrow).
+export function addMapLink(map: TopicMap, source: string, target: string, style: MapEdge["style"] = "dotted"): TopicMap {
+  const homes = sectionsByNode(map.sections);
+  const a = homes.get(source), b = homes.get(target);
+  if (!a || !b || source === target || [...a].some((x) => b.has(x)) || map.links.some((e) => (e.source === source && e.target === target) || (e.source === target && e.target === source))) return map;
+  return { ...map, links: [...map.links, { source, target, style }] };
+}
+
+export function removeMapLink(map: TopicMap, index: number): TopicMap {
+  return { ...map, links: map.links.filter((_, i) => i !== index) };
+}

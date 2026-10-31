@@ -1,6 +1,6 @@
 "use client";
 import dagre, { type Graph } from "@dagrejs/dagre";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { type CrossRef, crossRefs, sectionConnections } from "@/lib/topicMap";
 import type { MapEdge, MapNode, MapSection, TopicMap } from "@/lib/types";
 
@@ -89,6 +89,23 @@ type GraphProps = {
   onHover?: (n: MapNode | null) => void;
   onChip?: (c: Chip) => void;
   chipLabel?: (c: Chip) => string;
+  // Editing hooks (professor review only).
+  allClickable?: boolean;
+  selectedEdge?: number | null;
+  onEdgeClick?: (index: number) => void;
+  onNodeDoubleClick?: (n: MapNode) => void;
+  hideLabel?: (n: MapNode) => boolean;
+  nodeExtra?: (b: Box) => React.ReactNode;
+};
+
+// What the professor has selected on the map: a box, or an arrow inside one graph.
+export type MapSelection = { kind: "node"; sectionId: string; nodeId: string } | { kind: "edge"; sectionId: string; index: number } | null;
+export type MapEditor = {
+  selection: MapSelection;
+  onSelect: (s: MapSelection) => void;
+  onAddNode: (sectionId: string) => string; // returns the new node's id so it can be renamed straight away
+  onRename: (nodeId: string, label: string) => void;
+  onConnect: (sectionId: string, source: string, target: string) => void;
 };
 
 // Shrink wide graphs to the card, but never below ~55% (text stays legible); past that, scroll.
@@ -103,7 +120,7 @@ function GraphSvg(props: GraphProps) {
   );
 }
 
-function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNodeClick, onHover, onChip, chipLabel }: GraphProps) {
+function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNodeClick, onHover, onChip, chipLabel, allClickable, selectedEdge, onEdgeClick, onNodeDoubleClick, hideLabel, nodeExtra }: GraphProps) {
   const marker = useId().replace(/:/g, "");
   return (
     <>
@@ -111,10 +128,15 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         <marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="#57534e" />
         </marker>
+        <marker id={`${marker}s`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill={CROSS} />
+        </marker>
       </defs>
       {laid.lines.map((l, i) => (
-        <g key={i}>
-          <path d={l.d} fill="none" stroke="#57534e" strokeWidth={1.4} strokeDasharray={l.style === "dotted" ? "4 4" : undefined} markerEnd={arrows ? `url(#${marker})` : undefined} />
+        <g key={i} className={onEdgeClick ? "cursor-pointer" : undefined} onClick={onEdgeClick && ((e) => { e.stopPropagation(); onEdgeClick(i); })}>
+          {onEdgeClick && <path d={l.d} fill="none" stroke="transparent" strokeWidth={16} />}
+          <path d={l.d} fill="none" stroke={selectedEdge === i ? CROSS : "#57534e"} strokeWidth={selectedEdge === i ? 3 : 1.4}
+            strokeDasharray={l.style === "dotted" ? "4 4" : undefined} markerEnd={arrows ? `url(#${marker}${selectedEdge === i ? "s" : ""})` : undefined} />
           {l.label && (
             <g transform={`translate(${l.lx},${l.ly})`}>
               <rect x={-l.lw / 2} y={-9} width={l.lw} height={18} rx={4} fill="#fafaf9" stroke="#e7e5e4" />
@@ -127,11 +149,13 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         const st = styleFor?.(b.node) ?? {};
         const selected = isSelected?.(b.node) ?? false;
         const lit = isLit?.(b.node) ?? false;
-        const clickable = !!onNodeClick && !!b.node.conceptId;
+        const clickable = !!onNodeClick && (allClickable || !!b.node.conceptId);
         const top = b.y - b.h / 2;
+        const hidden = hideLabel?.(b.node);
         return (
           <g key={b.node.id} onPointerEnter={onHover && (() => onHover(b.node))} onPointerLeave={onHover && (() => onHover(null))}>
-            <g className={clickable ? "cursor-pointer" : undefined} onClick={clickable ? () => onNodeClick!(b.node) : undefined}>
+            <g className={clickable ? "cursor-pointer" : undefined} onClick={clickable ? (e) => { e.stopPropagation(); onNodeClick!(b.node); } : undefined}
+              onDoubleClick={onNodeDoubleClick && ((e) => { e.stopPropagation(); onNodeDoubleClick(b.node); })} opacity={hidden ? 0.35 : 1}>
               <rect x={b.x - b.w / 2} y={top} width={b.w} height={b.h} rx={8}
                 fill={st.fill ?? "#ffffff"} stroke={lit ? "#d97706" : selected ? CROSS : st.stroke ?? "#a8a29e"}
                 strokeWidth={lit || selected ? 3 : 1.3} strokeDasharray={st.dashed && !lit ? "5 3" : undefined} />
@@ -143,6 +167,7 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
               ))}
               {st.badge && <circle cx={b.x + b.w / 2 - 7} cy={top + 7} r={4} fill={st.badge} />}
             </g>
+            {nodeExtra?.(b)}
             {b.chips.map((c, i) => {
               const cw = 34, x = b.x - (b.chips.length * (cw + 4) - 4) / 2 + i * (cw + 4);
               return (
@@ -157,6 +182,88 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         );
       })}
     </>
+  );
+}
+
+// One graph with editing: click to select, double-click a box to rename it, double-click empty space
+// to add a box, drag a box's + handle onto another box to draw an arrow.
+function EditableGraph({ sectionId, editor, ...props }: GraphProps & { sectionId: string; editor: MapEditor }) {
+  const { laid } = props;
+  const svg = useRef<SVGSVGElement>(null);
+  const [hover, setHover] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [link, setLink] = useState<{ from: string; x: number; y: number } | null>(null);
+  const sel = editor.selection;
+
+  const toSvg = (e: React.PointerEvent | React.MouseEvent) => {
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse());
+    return { x: p.x, y: p.y };
+  };
+  const boxAt = (p: { x: number; y: number }) => laid.boxes.find((b) => Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2);
+  const commit = (save: boolean) => {
+    if (save && renaming?.value.trim()) editor.onRename(renaming.id, renaming.value.trim());
+    setRenaming(null);
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <svg ref={svg} viewBox={`0 0 ${laid.width} ${laid.height}`} className="mx-auto block h-auto w-full select-none"
+        style={{ maxWidth: laid.width, minWidth: laid.width * 0.55 }} role="img" aria-label={props.title}
+        onPointerDown={(e) => { if (e.target === svg.current) editor.onSelect(null); }}
+        onDoubleClick={(e) => {
+          if (e.target !== svg.current) return;
+          const id = editor.onAddNode(sectionId);
+          setRenaming({ id, value: "New concept" });
+        }}
+        onPointerMove={(e) => link && setLink({ ...link, ...toSvg(e) })}
+        onPointerUp={(e) => {
+          if (!link) return;
+          const to = boxAt(toSvg(e));
+          if (to && to.node.id !== link.from) editor.onConnect(sectionId, link.from, to.node.id);
+          setLink(null);
+        }}>
+        <GraphContent {...props} allClickable
+          isSelected={(n) => sel?.kind === "node" && sel.nodeId === n.id}
+          isLit={(n) => (!!link && hover === n.id && n.id !== link.from) || (props.isLit?.(n) ?? false)}
+          selectedEdge={sel?.kind === "edge" && sel.sectionId === sectionId ? sel.index : null}
+          onEdgeClick={(index) => editor.onSelect({ kind: "edge", sectionId, index })}
+          onNodeClick={(n) => editor.onSelect({ kind: "node", sectionId, nodeId: n.id })}
+          onNodeDoubleClick={(n) => setRenaming({ id: n.id, value: n.label })}
+          onHover={(n) => setHover(n?.id ?? null)}
+          hideLabel={(n) => renaming?.id === n.id}
+          nodeExtra={(b) => {
+            const top = b.y - b.h / 2;
+            if (renaming?.id === b.node.id) {
+              return (
+                <foreignObject x={b.x - Math.max(b.w, 200) / 2} y={top + 4} width={Math.max(b.w, 200)} height={30}>
+                  <input autoFocus value={renaming.value} className="h-[28px] w-full rounded-md border-2 border-[#00693e] bg-white px-2 text-center text-[13px] font-semibold outline-none"
+                    onFocus={(e) => e.target.select()} onChange={(e) => setRenaming({ ...renaming, value: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === "Enter") commit(true); if (e.key === "Escape") commit(false); e.stopPropagation(); }}
+                    onBlur={() => commit(true)} onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} />
+                </foreignObject>
+              );
+            }
+            const show = !link && (hover === b.node.id || (sel?.kind === "node" && sel.nodeId === b.node.id));
+            if (!show) return null;
+            return (
+              <g className="cursor-crosshair" onPointerDown={(e) => {
+                e.stopPropagation();
+                svg.current?.setPointerCapture(e.pointerId);
+                setLink({ from: b.node.id, ...toSvg(e) });
+              }}>
+                <title>Drag onto another box to draw an arrow</title>
+                <circle cx={b.x + b.w / 2} cy={b.y} r={10} fill={CROSS} stroke="#fff" strokeWidth={2} />
+                <text x={b.x + b.w / 2} y={b.y + 4.5} textAnchor="middle" fontSize={14} fontWeight={700} fill="#fff" pointerEvents="none">+</text>
+              </g>
+            );
+          }}
+        />
+        {link && (() => {
+          const from = laid.boxes.find((b) => b.node.id === link.from);
+          return from && <line x1={from.x + from.w / 2} y1={from.y} x2={link.x} y2={link.y} stroke={CROSS} strokeWidth={2.5} strokeDasharray="6 4" pointerEvents="none" />;
+        })()}
+      </svg>
+    </div>
   );
 }
 
@@ -344,8 +451,9 @@ function FullScreenMap({ title, map, styleFor, onSelectConcept, onClose, legend 
   );
 }
 
-export default function TopicMapView({ title, map, styleFor, selectedConceptId, onSelectConcept, legend }: {
+export default function TopicMapView({ title, map, styleFor, selectedConceptId, onSelectConcept, legend, editor }: {
   title: string;
+  editor?: MapEditor;
   map: TopicMap;
   styleFor?: (n: MapNode) => NodeStyle;
   selectedConceptId?: string | null;
@@ -413,16 +521,25 @@ export default function TopicMapView({ title, map, styleFor, selectedConceptId, 
       {overview && (
         <section className="card space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wide text-stone-500">How the graphs connect</h3>
-          <GraphSvg laid={overview} title="How the graphs connect" arrows={false}
+          <GraphSvg laid={overview} title="How the graphs connect" arrows={false} allClickable
             onNodeClick={(n) => document.getElementById(`${anchor}-${n.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} />
         </section>
       )}
       {map.sections.map((s, i) => (
         <section key={s.id} id={`${anchor}-${s.id}`} className="card scroll-mt-4 space-y-3">
-          <h3 className="text-lg font-bold">{i + 1}. {s.title}</h3>
-          <GraphSvg laid={sectionLayouts[i]} title={s.title} styleFor={styleFor} isSelected={isSelected}
-            isLit={(n) => spot?.sectionId === s.id && spot.nodeId === n.id} onNodeClick={nodeClick}
-            onChip={(c) => setSpot({ sectionId: c.sectionId, nodeId: c.nodeId })} chipLabel={(c) => `↗ ${sectionNumber(c.sectionId)}`} />
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-bold">{i + 1}. {s.title}</h3>
+            {editor && <button className="btn-ghost" onClick={() => editor.onSelect({ kind: "node", sectionId: s.id, nodeId: editor.onAddNode(s.id) })}>+ Add node</button>}
+          </div>
+          {editor ? (
+            <EditableGraph sectionId={s.id} editor={editor} laid={sectionLayouts[i]} title={s.title} styleFor={styleFor}
+              isLit={(n) => spot?.sectionId === s.id && spot.nodeId === n.id}
+              onChip={(c) => setSpot({ sectionId: c.sectionId, nodeId: c.nodeId })} chipLabel={(c) => `↗ ${sectionNumber(c.sectionId)}`} />
+          ) : (
+            <GraphSvg laid={sectionLayouts[i]} title={s.title} styleFor={styleFor} isSelected={isSelected}
+              isLit={(n) => spot?.sectionId === s.id && spot.nodeId === n.id} onNodeClick={nodeClick}
+              onChip={(c) => setSpot({ sectionId: c.sectionId, nodeId: c.nodeId })} chipLabel={(c) => `↗ ${sectionNumber(c.sectionId)}`} />
+          )}
           {(s.sources || s.note) && (
             <p className="text-xs leading-relaxed text-stone-500">
               {s.sources && <><b className="text-stone-700">Source:</b> {s.sources}. </>}

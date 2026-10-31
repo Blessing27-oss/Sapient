@@ -1,3 +1,4 @@
+import { orientEdges } from "./graph.ts";
 import { createHash } from "node:crypto";
 import { createGenerationCache } from "./generationCache.ts";
 import Anthropic from "@anthropic-ai/sdk";
@@ -83,6 +84,8 @@ const schema = {
     title: { type: "string" },
     concepts: {
       type: "array",
+      minItems: 1,
+      description: "Assessable concepts explicitly taught by the supplied lecture; must not be empty.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -112,6 +115,8 @@ const schema = {
     },
     questions: {
       type: "array",
+      minItems: 1,
+      description: "Grounded multiple-choice questions linked to the supplied concept ids; must not be empty.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -194,7 +199,17 @@ async function generate(source: string, pageCount: number): Promise<Extracted> {
   if (response.stop_reason === "refusal") throw new Error("The model declined to process this document.");
   if (response.stop_reason === "max_tokens") throw new Error("The model's response was cut off; try a shorter PDF.");
   const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-  return sanitize(JSON.parse(text), pageCount);
+  try {
+    return sanitize(JSON.parse(text), pageCount);
+  } catch (error) {
+    // Metadata only: never log lecture text, generated content, or credentials.
+    console.warn("[extract] generation validation failed", {
+      messageId: response.id, model: response.model, stopReason: response.stop_reason,
+      inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens,
+      pageCount, sourceCharacters: source.length,
+    });
+    throw error;
+  }
 }
 
 type Raw = {
@@ -261,5 +276,5 @@ export function sanitize(raw: Raw, pageCount: number): Extracted {
     }
     throw new UnusableDraftError(`${summary}. Try again, or try a PDF of lecture notes or slides`);
   }
-  return { title: raw.title, concepts, edges, topicMap: sanitizeTopicMap(raw.topicMap, ids), questions, source: "llm" };
+  return { title: raw.title, concepts, edges: orientEdges(concepts.map((c) => c.id), edges), topicMap: sanitizeTopicMap(raw.topicMap, ids), questions, source: "llm" };
 }

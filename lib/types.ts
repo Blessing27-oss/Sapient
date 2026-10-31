@@ -23,7 +23,7 @@ export type MapSection = { id: string; title: string; direction: "TD" | "LR"; no
 export type TopicMap = { sourceNote: string; sections: MapSection[]; links: MapEdge[]; studyRoute: string };
 
 export type Response = { questionId: string; choice: number; correct: boolean; at: number };
-export type Student = { id: string; name: string; responses: Response[] };
+export type Student = { id: string; name: string; userId?: string; responses: Response[] };
 export type Challenge = {
   id: string;
   questionId: string;
@@ -35,6 +35,8 @@ export type Challenge = {
 export type Insight = { conceptId: string; status: "open" | "useful" | "dismissed"; note?: string };
 export type Room = {
   code: string;
+  ownerId?: string;
+  sourceIds?: string[];
   title: string;
   concepts: Concept[];
   edges: Edge[];

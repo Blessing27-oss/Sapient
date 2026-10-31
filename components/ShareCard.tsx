@@ -1,11 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export default function ShareCard({ code }: { code: string }) {
+export default function ShareCard({ code, compact }: { code: string; compact?: boolean }) {
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState("");
   useEffect(() => { setLink(`${location.origin}/student?code=${code}`); }, [code]);
   const copy = async (what: string, v: string) => { await navigator.clipboard.writeText(v); setCopied(what); setTimeout(() => setCopied(""), 1500); };
+  if (compact)
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-2.5 shadow-sm">
+        <span className="text-xs font-semibold uppercase tracking-widest text-stone-500">Room</span>
+        <span className="font-mono text-2xl font-bold tracking-[0.2em] text-[#00693e]">{code}</span>
+        <button className="btn-ghost" onClick={() => copy("code", code)}>{copied === "code" ? "Copied ✓" : "Copy code"}</button>
+        <button className="btn-ghost" onClick={() => copy("link", link)}>{copied === "link" ? "Copied ✓" : "Copy link"}</button>
+      </div>
+    );
   return (
     <div className="rounded-2xl bg-[#00693e] p-6 text-white shadow-sm">
       <p className="text-xs uppercase tracking-widest text-green-100">Students join with</p>

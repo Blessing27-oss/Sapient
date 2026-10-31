@@ -27,6 +27,9 @@ export function withDB<T>(fn: (db: DB) => T | Promise<T>): Promise<T> {
 export async function getRoom(code: string): Promise<Room | undefined> {
   return (await read())[code.toUpperCase()];
 }
+export async function getAllRooms(): Promise<Room[]> {
+  return Object.values(await read());
+}
 export function newCode(db: DB): string {
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   for (;;) {

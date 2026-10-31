@@ -47,6 +47,9 @@ test("structured generation receives original page boundaries and returns an una
     assert.equal(result.edges[0].type, "related");
     assert.match(JSON.stringify(body.messages), /\[Page 1\][\s\S]*\[Page 2\][\s\S]*\[Page 3\]/);
     assert.equal((body.output_config as { format: { type: string } }).format.type, "json_schema");
+    const format = body.output_config as { format: { schema: { properties: { concepts: { minItems: number }; questions: { minItems: number } } } } };
+    assert.equal(format.format.schema.properties.concepts.minItems, 1, "an empty concepts array must not satisfy the API schema");
+    assert.equal(format.format.schema.properties.questions.minItems, 1, "an empty question array must not satisfy the API schema");
     assert.equal(body.stream, true);
     assert.match(String(body.system), /several slides per PDF page/);
     assert.match(String(body.system), /physical \[Page N\] marker/);
@@ -104,4 +107,25 @@ test("questions tagged by concept name or different casing still resolve; unusab
 
 test("empty AI output is reported as a generation failure rather than blaming the lecture", () => {
   assert.throws(() => sanitize({ title: "Strepsirrhini", concepts: [], relationships: [], questions: [] }, 8), /AI returned an empty draft/);
+});
+
+
+test("an empty provider response is rejected and retry makes a fresh request", async () => {
+  const oldKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "test-empty-retry-key";
+  let calls = 0;
+  const fetchMock = mock.method(globalThis, "fetch", async () => {
+    calls++;
+    return sse(JSON.stringify(calls === 1 ? { title: "Lecture", concepts: [], relationships: [], questions: [] } : draft()));
+  });
+  try {
+    await assert.rejects(extract(["Lecture retry test: strepsirrhines have a tooth comb and grooming claw."]), /AI returned an empty draft/);
+    const result = await extract(["Lecture retry test: strepsirrhines have a tooth comb and grooming claw."]);
+    assert.equal(result.concepts.length, 2);
+    assert.equal(calls, 2);
+  } finally {
+    fetchMock.mock.restore();
+    if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = oldKey;
+  }
 });
