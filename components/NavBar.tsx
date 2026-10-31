@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -21,7 +22,7 @@ export default function NavBar() {
     <header className="border-b border-stone-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2 font-serif text-xl font-bold text-[#00693e]">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#00693e] text-sm text-white">S</span>Sapient
+          <Logo className="h-10" />Sapient
         </Link>
         <nav className="flex items-center gap-5 text-sm font-medium text-stone-600">
           {user ? (
@@ -37,9 +38,9 @@ export default function NavBar() {
             </>
           ) : !onLogin && (
             <>
-              <Link href="/professor" className="hover:text-[#00693e]">Professor</Link>
-              <Link href="/student" className="hover:text-[#00693e]">Student</Link>
-              <Link href="/login" className="btn !py-1.5">Sign in</Link>
+              <Link href="/professor" className="hidden hover:text-[#00693e] sm:inline">Professor</Link>
+              <Link href="/student" className="hidden hover:text-[#00693e] sm:inline">Student</Link>
+              <Link href="/login" className="btn whitespace-nowrap !py-1.5">Sign in</Link>
             </>
           )}
         </nav>
