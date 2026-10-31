@@ -24,7 +24,8 @@ type StudentState = {
   diagnostics: { conceptId: string; name: string; label: DiagnosticLabel; directCount: number; directCorrect: number; inferredEvidence: number }[];
 };
 
-const LABEL_ORDER: DiagnosticLabel[] = ["Needs review", "Mixed evidence", "Demonstrated strength", "Tentative inference", "Unknown"];
+// Labels backed by a question the student actually answered, kept apart from inferred ones.
+const DIRECT_LABELS: DiagnosticLabel[] = ["Needs review", "Mixed evidence", "Demonstrated strength"];
 const LABEL_HELP: Record<DiagnosticLabel, string> = {
   "Needs review": "You answered a question on this incorrectly.",
   "Mixed evidence": "Your answers on this conflict.",
@@ -32,6 +33,19 @@ const LABEL_HELP: Record<DiagnosticLabel, string> = {
   "Tentative inference": "Not asked directly; guessed from a related concept. Treat with caution.",
   Unknown: "No evidence yet.",
 };
+
+// Stable per-student option order, so the keyed answer isn't always in the same slot.
+function shuffledOrder(n: number, seed: string): number[] {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const order = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+    const j = h % (i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
 
 export default function StudentPage({ params }: { params: Promise<{ code: string; sid: string }> }) {
   const { code, sid } = use(params);
@@ -104,14 +118,14 @@ export default function StudentPage({ params }: { params: Promise<{ code: string
           </p>
           <h2 className="mt-1 text-lg font-medium">{state.next.text}</h2>
           <div className="mt-4 space-y-2">
-            {state.next.options.map((opt, i) => (
+            {shuffledOrder(state.next.options.length, sid + state.next.id).map((i, slot) => (
               <button
                 key={i}
                 onClick={() => setSelected(i)}
                 className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${selected === i ? "border-indigo-500 bg-indigo-50" : "border-slate-200 hover:border-slate-400"}`}
               >
-                <span className="mr-2 font-mono text-slate-400">{String.fromCharCode(65 + i)}</span>
-                {opt}
+                <span className="mr-2 font-mono text-slate-400">{String.fromCharCode(65 + slot)}</span>
+                {state.next!.options[i]}
               </button>
             ))}
           </div>
@@ -141,7 +155,9 @@ function Shell({ children, name, title }: { children: React.ReactNode; name?: st
 }
 
 function Diagnostic({ state, code, sid, reload }: { state: StudentState; code: string; sid: string; reload: () => void }) {
-  const groups = LABEL_ORDER.map((label) => ({ label, items: state.diagnostics.filter((d) => d.label === label) })).filter((g) => g.items.length);
+  const direct = DIRECT_LABELS.map((label) => ({ label, items: state.diagnostics.filter((d) => d.label === label) })).filter((g) => g.items.length);
+  const inferred = state.diagnostics.filter((d) => d.label === "Tentative inference");
+  const unknown = state.diagnostics.filter((d) => d.label === "Unknown");
   return (
     <>
       <Card>
@@ -149,8 +165,11 @@ function Diagnostic({ state, code, sid, reload }: { state: StudentState; code: s
         <p className="mt-1 text-sm text-slate-600">
           Based on {state.answered.filter((a) => !a.invalidated).length} question(s). This is a rough signal to guide review, not a grade.
         </p>
-        <div className="mt-4 space-y-4">
-          {groups.map((g) => (
+
+        <h3 className="mt-5 text-xs font-semibold tracking-wide text-slate-500 uppercase">From your answers</h3>
+        <p className="text-xs text-slate-500">A question you answered tested these concepts directly.</p>
+        <div className="mt-2 space-y-4">
+          {direct.map((g) => (
             <div key={g.label}>
               <div className="flex items-center gap-2">
                 <LabelBadge label={g.label} />
@@ -160,17 +179,44 @@ function Diagnostic({ state, code, sid, reload }: { state: StudentState; code: s
                 {g.items.map((d) => (
                   <li key={d.conceptId}>
                     {d.name}
-                    {d.directCount > 0 && (
-                      <span className="ml-1 text-xs text-slate-400">
-                        ({d.directCorrect}/{d.directCount})
-                      </span>
-                    )}
+                    <span className="ml-1 text-xs text-slate-400">
+                      ({d.directCorrect}/{d.directCount})
+                    </span>
                   </li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
+
+        {inferred.length > 0 && (
+          <div className="mt-5 rounded-lg border border-dashed border-slate-300 p-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Inferred from related concepts</h3>
+              <LabelBadge label="Tentative inference" />
+            </div>
+            <p className="text-xs text-slate-500">{LABEL_HELP["Tentative inference"]}</p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {inferred.map((d) => (
+                <li key={d.conceptId} className="flex justify-between gap-3">
+                  <span>{d.name}</span>
+                  <span className="text-xs text-slate-500">
+                    {d.inferredEvidence > 0 ? "related answers lean toward understanding" : "related answers suggest a possible gap"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {unknown.length > 0 && (
+          <div className="mt-5">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Not enough evidence yet</h3>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">{unknown.map((d) => d.name).join(", ")}</p>
+          </div>
+        )}
       </Card>
 
       <Card>
