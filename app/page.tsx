@@ -66,20 +66,19 @@ export default function Home() {
       <section className="relative mx-auto grid min-h-[calc(100vh-190px)] max-w-5xl items-center gap-8 lg:grid-cols-[1fr_1.05fr]">
         <div className="space-y-8">
           <h1 className="text-6xl font-bold leading-[1.02] tracking-tight sm:text-7xl">
-            See where
+            Every
             <br />
-            your class
+            lecture,
             <br />
-            is{" "}
             <span className="relative">
-              <TwoTone>stuck</TwoTone>
+              <TwoTone>mapped</TwoTone>
               <svg aria-hidden viewBox="0 0 200 12" className="absolute -bottom-1 left-0 w-full" preserveAspectRatio="none">
                 <path d="M2 8 Q50 1 100 6 T198 5" fill="none" stroke="#d97706" strokeWidth="4" strokeLinecap="round" />
               </svg>
             </span>
             .
           </h1>
-          <p className="text-xl text-stone-500">Upload a lecture. Share a code. See the gaps.</p>
+          <p className="text-balance text-xl text-stone-500">Professors build the map. Students find their place on it.</p>
           <div className="flex flex-wrap gap-3">
             <Link href="/professor" className="btn !px-7 !py-3.5 !text-base">I’m a professor →</Link>
             <Link href="/student" className="btn-ghost !px-7 !py-3.5 !text-base">I’m a student</Link>
