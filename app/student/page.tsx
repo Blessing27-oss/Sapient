@@ -67,7 +67,7 @@ function StudentInner() {
             <div className="card space-y-2">
               <h2 className="text-lg font-bold">Your rooms</h2>
               {rooms.map((r) => (
-                <button key={r.code} onClick={() => join(r.code)} className="flex w-full items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-left text-sm hover:border-[#00693e] hover:bg-green-50">
+                <button key={r.code} onClick={() => join(r.code)} className="flex w-full items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-left text-sm hover:border-[#00693e] hover:bg-[#f1f8f5]">
                   <span className="font-medium">{r.title}</span>
                   <span className="text-stone-500"><span className="font-mono">{r.code}</span> · {r.answered >= r.total ? "view results" : `${r.answered}/${r.total} answered`}</span>
                 </button>
@@ -84,7 +84,7 @@ function StudentInner() {
             ["You can push back", "Think a question was unclear? Tell your professor and they can review it."],
           ].map(([t, d]) => (
             <div key={t} className="flex gap-3">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#00693e]" />
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full fold" />
               <div><p className="font-semibold">{t}</p><p className="text-sm text-stone-500">{d}</p></div>
             </div>
           ))}
@@ -105,13 +105,13 @@ function StudentInner() {
     return (
       <div className="mx-auto max-w-xl space-y-5">
         <div>
-          <div className="mb-2 h-2 overflow-hidden rounded-full bg-stone-200"><div className="h-full bg-[#00693e] transition-all" style={{ width: `${(next.progress.answered / next.progress.total) * 100}%` }} /></div>
+          <div className="mb-2 h-2 overflow-hidden rounded-full bg-stone-200"><div className="h-full fold transition-all" style={{ width: `${(next.progress.answered / next.progress.total) * 100}%` }} /></div>
           <p className="text-sm text-stone-500">Question {next.progress.answered + 1} of {next.progress.total}</p>
         </div>
         <h1 className="text-2xl font-bold leading-snug">{next.question.text}</h1>
         <div className="space-y-2">
           {next.question.options.map((o, i) => (
-            <button key={i} className="flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white p-4 text-left transition hover:border-[#00693e] hover:bg-green-50" onClick={() => answer(next.question, i)}>
+            <button key={i} className="flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white p-4 text-left transition hover:border-[#00693e] hover:bg-[#f1f8f5]" onClick={() => answer(next.question, i)}>
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-100 text-sm font-semibold">{"ABCD"[i]}</span>{o}
             </button>
           ))}
@@ -135,9 +135,9 @@ function StudentInner() {
         {next.answered.map((a) => (
           <div key={a.questionId} className="card space-y-1 text-sm">
             <p className="font-semibold">{a.text}</p>
-            <p className={a.correct ? "text-green-700" : "text-red-700"}>You answered: {a.options[a.choice]} {a.correct ? "✓" : `✗ — correct: ${a.options[a.correctAnswer]}`}</p>
+            <p className={a.correct ? "fold-text" : "text-red-700"}>You answered: {a.options[a.choice]} {a.correct ? "✓" : `✗ — correct: ${a.options[a.correctAnswer]}`}</p>
             {a.explanation && <p className="text-stone-500">{a.explanation}</p>}
-            <button className="text-[#00693e] underline disabled:text-stone-400 disabled:no-underline" disabled={challenged[a.questionId]} onClick={() => challenge(a.questionId)}>
+            <button className="fold-text underline disabled:text-stone-400 disabled:no-underline" disabled={challenged[a.questionId]} onClick={() => challenge(a.questionId)}>
               {challenged[a.questionId] ? "Challenge sent to your professor" : "I disagree with this assessment"}
             </button>
           </div>

@@ -10,21 +10,21 @@ export default function ShareCard({ code, compact }: { code: string; compact?: b
     return (
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-2.5 shadow-sm">
         <span className="text-xs font-semibold uppercase tracking-widest text-stone-500">Room</span>
-        <span className="font-mono text-2xl font-bold tracking-[0.2em] text-[#00693e]">{code}</span>
+        <span className="font-mono text-2xl font-bold tracking-[0.2em] fold-text">{code}</span>
         <button className="btn-ghost" onClick={() => copy("code", code)}>{copied === "code" ? "Copied ✓" : "Copy code"}</button>
         <button className="btn-ghost" onClick={() => copy("link", link)}>{copied === "link" ? "Copied ✓" : "Copy link"}</button>
       </div>
     );
   return (
-    <div className="rounded-2xl bg-[#00693e] p-6 text-white shadow-sm">
-      <p className="text-xs uppercase tracking-widest text-green-100">Students join with</p>
+    <div className="rounded-2xl fold p-6 text-white shadow-sm">
+      <p className="text-xs uppercase tracking-widest text-[#e3f1eb]">Students join with</p>
       <div className="mt-2 flex flex-wrap items-center gap-4">
         <span className="font-mono text-5xl font-bold tracking-[0.25em]">{code}</span>
         <button className="rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25" onClick={() => copy("code", code)}>{copied === "code" ? "Copied ✓" : "Copy code"}</button>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
         <code className="max-w-full truncate rounded-md bg-black/20 px-3 py-1.5">{link}</code>
-        <button className="rounded-md bg-white px-3 py-1.5 font-medium text-[#00693e] hover:bg-green-50" onClick={() => copy("link", link)}>{copied === "link" ? "Copied ✓" : "Copy link"}</button>
+        <button className="rounded-md bg-white px-3 py-1.5 font-medium fold-text hover:bg-[#f1f8f5]" onClick={() => copy("link", link)}>{copied === "link" ? "Copied ✓" : "Copy link"}</button>
       </div>
     </div>
   );

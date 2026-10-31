@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bfsTree } from "@/lib/graph";
 
 // `flag` draws a small coloured dot on the node (e.g. "not yet verified").
@@ -71,6 +71,7 @@ export default function Graph({
   solidRoot?: boolean;
 }) {
   const svg = useRef<SVGSVGElement>(null);
+  const foldId = `fold${useId().replace(/[^a-zA-Z0-9]/g, "")}`; // the S's two greens as a hard-edged gradient, for the solid root node
   const [pos, setPos] = useState<Record<string, Pt>>({});
   const [drag, setDrag] = useState<Drag | null>(null);
   const [cursor, setCursor] = useState<Pt>({ x: 0, y: 0 });
@@ -145,6 +146,11 @@ export default function Graph({
         if (onRename) setEditing({ id, value: "New concept" });
       }}
     >
+      <defs>
+        <linearGradient id={foldId} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="20" y2="9" spreadMethod="reflect">
+          <stop offset="0" stopColor="#00693e" /><stop offset="0.4" stopColor="#00693e" /><stop offset="0.6" stopColor="#16895c" /><stop offset="1" stopColor="#16895c" />
+        </linearGradient>
+      </defs>
       {edges.map((e, i) => {
         const sn = nodes.find((n) => n.id === e.source), tn = nodes.find((n) => n.id === e.target);
         if (!sn || !tn) return null;
@@ -193,7 +199,7 @@ export default function Graph({
             onDoubleClick={(e) => { if (!onRename) return; e.stopPropagation(); setEditing({ id: n.id, value: n.editName ?? n.name }); }}
             onPointerDown={(e) => { e.stopPropagation(); const c = toSvg(e); setDrag({ kind: "node", id: n.id, dx: c.x - p.x, dy: c.y - p.y, moved: false }); }}
           >
-            <rect x={-w / 2} y={-h} width={w} height={h * 2} rx={h} fill={solid ? n.accent ?? "#00693e" : n.fill}
+            <rect x={-w / 2} y={-h} width={w} height={h * 2} rx={h} fill={solid ? (n.accent && n.accent !== "#00693e" ? n.accent : `url(#${foldId})`) : n.fill}
               stroke={target ? "#00693e" : sel ? "#1c1917" : n.accent ?? "#d6d3d1"} strokeWidth={sel || target ? 3 : isRoot ? 2.5 : 1.75} />
             <text textAnchor="middle" dy={4.5} fontSize={isRoot ? 14 : 13} fontWeight={isRoot ? 700 : 600} fill={solid ? "#fff" : n.text ?? "#1c1917"} pointerEvents="none" opacity={editing?.id === n.id ? 0 : 1}>{n.name}</text>
             {editing?.id === n.id && (
@@ -225,7 +231,7 @@ export default function Graph({
                 className="cursor-crosshair"
                 onPointerDown={(e) => { e.stopPropagation(); onSelect?.(n.id); setCursor(toSvg(e)); setDrag({ kind: "link", from: n.id }); }}
               >
-                <circle r={9} fill="#00693e" stroke="#fff" strokeWidth={2} />
+                <circle r={9} fill={`url(#${foldId})`} stroke="#fff" strokeWidth={2} />
                 <text textAnchor="middle" dy={4} fontSize={12} fill="#fff" fontWeight={700} pointerEvents="none">+</text>
                 <title>Drag to another concept to connect</title>
               </g>

@@ -44,9 +44,9 @@ export default function QuestionList({ questions, concepts, onChange }: { questi
         const isOpen = open.has(q.id);
         const ready = q.approved && problems.length === 0;
         return (
-          <div id={`card-${q.id}`} key={q.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${ready ? "border-green-300" : "border-stone-200"}`}>
+          <div id={`card-${q.id}`} key={q.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${ready ? "border-[#96cab6]" : "border-stone-200"}`}>
             <div className="flex items-start gap-3 p-4">
-              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${ready ? "bg-[#00693e] text-white" : "bg-stone-100 text-stone-600"}`}>{ready ? "✓" : n + 1}</span>
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${ready ? "fold text-white" : "bg-stone-100 text-stone-600"}`}>{ready ? "✓" : n + 1}</span>
               <button className="min-w-0 flex-1 text-left" onClick={() => toggleOpen(q.id)}>
                 <p className={`font-semibold leading-snug ${isOpen ? "" : "line-clamp-2"} ${q.text.trim() ? "" : "text-stone-400"}`}>{q.text.trim() || "New question — click to write it"}</p>
                 {!isOpen && (
@@ -59,7 +59,7 @@ export default function QuestionList({ questions, concepts, onChange }: { questi
                 )}
               </button>
               <div className="flex shrink-0 items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${ready ? "bg-green-100 text-green-800" : problems.length ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${ready ? "bg-[#e3f1eb] fold-text" : problems.length ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
                   {ready ? "Approved" : problems.length ? "Needs work" : "Draft"}
                 </span>
                 <button onClick={() => toggleOpen(q.id)} aria-label={isOpen ? "Collapse" : "Edit"} className="rounded-full p-1.5 text-stone-500 hover:bg-stone-100">{isOpen ? "▴" : "▾"}</button>
@@ -78,13 +78,13 @@ export default function QuestionList({ questions, concepts, onChange }: { questi
                     {q.options.map((o, i) => {
                       const correct = q.correctAnswer === i;
                       return (
-                        <div key={i} className={`flex items-center gap-3 rounded-xl border bg-white p-2 pr-3 ${correct ? "border-green-400 ring-1 ring-green-200" : "border-stone-200"}`}>
+                        <div key={i} className={`flex items-center gap-3 rounded-xl border bg-white p-2 pr-3 ${correct ? "border-[#16895c] ring-1 ring-[#c5e2d6]" : "border-stone-200"}`}>
                           <button type="button" onClick={() => set(q.id, { correctAnswer: i })} title="Mark as correct"
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${correct ? "bg-green-600 text-white" : "bg-stone-100 text-stone-500 hover:bg-green-100"}`}>
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${correct ? "bg-[#00693e] text-white" : "bg-stone-100 text-stone-500 hover:bg-[#e3f1eb]"}`}>
                             {correct ? "✓" : "ABCD"[i]}
                           </button>
                           <input className="w-full bg-transparent text-sm outline-none" value={o} placeholder={`Choice ${"ABCD"[i]}`} onChange={(e) => set(q.id, { options: q.options.map((x, j) => (j === i ? e.target.value : x)) })} />
-                          {correct && <span className="shrink-0 text-xs font-semibold text-green-700">Correct</span>}
+                          {correct && <span className="shrink-0 text-xs font-semibold fold-text">Correct</span>}
                         </div>
                       );
                     })}
@@ -121,7 +121,7 @@ export default function QuestionList({ questions, concepts, onChange }: { questi
                   <button
                     disabled={problems.length > 0}
                     onClick={() => set(q.id, { approved: !q.approved })}
-                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${q.approved ? "bg-green-100 text-green-800 hover:bg-green-200" : "bg-[#00693e] text-white hover:bg-[#014d2e]"}`}>
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${q.approved ? "bg-[#e3f1eb] fold-text hover:bg-[#c5e2d6]" : "fold text-white hover:brightness-90"}`}>
                     {q.approved ? "✓ Approved (click to undo)" : "Approve question"}
                   </button>
                 </div>

@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 82"><g>
-  <!-- folded-paper S: one ribbon, with the two folds shaded -->
-  <path d="M45 30 C45 20 19 20 19 33 C19 45 45 41 45 54 C45 66 17 65 17 54" fill="none" stroke="#00693e" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M19 28.5 L27 24 L25 31 Z" fill="#4ca87c"/>
-  <path d="M45 38 L37 42.5 L39.5 35 Z" fill="#023f26"/>
-  <path d="M45 49 L37 44.5 L38 52 Z" fill="#4ca87c"/>
-  <path d="M17 59 L25 62.5 L24 56 Z" fill="#023f26"/>
-  <!-- graduation cap -->
-  <path d="M21 14 v7 c0 4 22 4 22 0 v-7" fill="#292524"/>
-  <path d="M32 3 L55 12 L32 21 L9 12 Z" fill="#1c1917"/>
-  <path d="M32 3 L55 12 L32 21 Z" fill="#44403c"/>
-  <path d="M52 13.5 V25" stroke="#d97706" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="52" cy="27" r="2.6" fill="#d97706"/>
-  <!-- smile -->
-  <path d="M22 70 Q32 78 42 70" fill="none" stroke="#d97706" stroke-width="3.5" stroke-linecap="round"/>
-</g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -20 112 120">
+<path d="M57 30 C57 12 24 12 24 31 C24 48 59 40 59 61 C59 80 23 78 21 63" fill="none" stroke="#00693e" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M57 30 C57 12 24 12 24 31 C24 48 59 40 59 61 C59 80 23 78 21 63" fill="none" stroke="#16895c" stroke-width="16" stroke-dasharray="16.4 16.4" stroke-dashoffset="-7.5"/>
+<g transform="translate(41.5,44.5)"><circle cx="-6.5" cy="-2.8" r="2.2" fill="#fff"/><circle cx="6.5" cy="-2.8" r="2.2" fill="#fff"/><path d="M-5 3 Q0 8 5 3" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></g>
+<ellipse cx="26.9" cy="13" rx="12" ry="3.2" transform="rotate(-30 26.9 13)" fill="#000" opacity="0.25"/>
+<g transform="translate(18.9,-1.7) rotate(-30) scale(0.8)"><path d="M-14 4 L-14 15 C-14 23 14 23 14 15 L14 4 Z" fill="#292524"/><path d="M0 -12 L30 0 L0 12 L-30 0 Z" fill="#1c1917"/><path d="M0 -12 L30 0 L0 12 Z" fill="#3b3633"/><path d="M0 0 Q15 -2.5 30 0" fill="none" stroke="#d97706" stroke-width="1.6" stroke-linecap="round"/><circle cx="0" cy="0" r="2.4" fill="#d97706"/></g>
+<g transform="translate(-1.9,10.3)"><path d="M0 0 C3.5 5 -3.5 10 0.5 15 S-1 21 0 25" fill="none" stroke="#d97706" stroke-width="1.7" stroke-linecap="round"/><g transform="translate(0,25)"><circle r="2.6" fill="#d97706"/><g fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"><path d="M0 2 Q-4 8 -5.5 14"/><path d="M0 2 Q-2 9 -2.6 16"/><path d="M0 2 L0 17"/><path d="M0 2 Q2 9 2.6 16"/><path d="M0 2 Q4 8 5.5 14"/></g></g></g>
 </svg>
