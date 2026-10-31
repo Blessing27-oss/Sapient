@@ -12,6 +12,16 @@ export type Question = {
   invalidated?: boolean;
   revision?: number;
 };
+// Topic map: the lecture's own structure, shown to people. Separate from the concept/edge graph
+// the engine uses for evidence. A node links to an assessable concept via conceptId.
+export type MapNode = { id: string; label: string; details: string[]; conceptId?: string };
+// solid = classification or a relationship the material states; dotted = related concepts.
+export type MapEdge = { source: string; target: string; style: "solid" | "dotted"; label?: string };
+export type MapSection = { id: string; title: string; direction: "TD" | "LR"; nodes: MapNode[]; edges: MapEdge[]; sources: string; note: string };
+// Sections form one knowledge graph: a node id reused in several sections is the same idea,
+// and links connect nodes that live in different sections.
+export type TopicMap = { sourceNote: string; sections: MapSection[]; links: MapEdge[]; studyRoute: string };
+
 export type Response = { questionId: string; choice: number; correct: boolean; at: number };
 export type Student = { id: string; name: string; responses: Response[] };
 export type Challenge = {
@@ -28,6 +38,7 @@ export type Room = {
   title: string;
   concepts: Concept[];
   edges: Edge[];
+  topicMap?: TopicMap;
   questions: Question[];
   students: Student[];
   challenges: Challenge[];

@@ -1,16 +1,17 @@
 "use client";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Graph from "@/components/Graph";
+import TopicMapView from "@/components/TopicMapView";
 import { LABEL_TEXT } from "@/lib/engine";
+import { fallbackTopicMap } from "@/lib/topicMap";
 import { LABEL_FILL, LABEL_RING } from "@/lib/ui";
-import type { Label } from "@/lib/types";
+import type { Edge, Label, TopicMap } from "@/lib/types";
 
 type Q = { id: string; text: string; options: string[] };
 type Progress = { answered: number; total: number };
 type Next =
   | { question: Q; progress: Progress }
-  | { done: true; progress: Progress; edges: { source: string; target: string; weight: number }[]; diagnostic: { conceptId: string; name: string; label: Label }[];
+  | { done: true; progress: Progress; title: string; topicMap?: TopicMap; edges: Edge[]; diagnostic: { conceptId: string; name: string; label: Label }[];
       answered: { questionId: string; text: string; correct: boolean; choice: number; options: string[]; correctAnswer: number; explanation?: string }[] };
 
 function StudentInner() {
@@ -82,9 +83,17 @@ function StudentInner() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Your preliminary diagnostic</h1>
-        <p className="mt-1 max-w-2xl text-stone-600">Based on only {next.progress.total} questions. Dashed concepts are inferred from related answers, not answered directly. Grey means not enough evidence.</p>
+        <p className="mt-1 max-w-2xl text-stone-600">Based on only {next.progress.total} questions. Coloured boxes are concepts you were assessed on; dashed ones are inferred from related answers, not answered directly, and grey means not enough evidence. Pale boxes are lecture context to help you study.</p>
       </div>
-      <Graph nodes={next.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, fill: LABEL_FILL[d.label], ring: LABEL_RING.includes(d.label) }))} edges={next.edges} />
+      <TopicMapView
+        title={next.title}
+        map={next.topicMap ?? fallbackTopicMap(next.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, importance: 1, verified: true })), next.edges)}
+        styleFor={(n) => {
+          const d = next.diagnostic.find((x) => x.conceptId === n.conceptId);
+          if (!d) return { fill: "#fafaf9", stroke: "#d6d3d1" };
+          return { fill: LABEL_FILL[d.label], stroke: "#78716c", dashed: LABEL_RING.includes(d.label) };
+        }}
+      />
       <div className="flex flex-wrap gap-2 text-xs">
         {(Object.keys(LABEL_FILL) as Label[]).map((l) => <span key={l} className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1"><i className="h-3 w-3 rounded-full border" style={{ background: LABEL_FILL[l] }} />{LABEL_TEXT[l]}</span>)}
       </div>

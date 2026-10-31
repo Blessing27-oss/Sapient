@@ -20,7 +20,6 @@ export default function ProfessorGate({ children }: { children: React.ReactNode 
     s.onload = () => {
       window.google?.accounts.id.initialize({
         client_id: me.googleClientId,
-        hd: "dartmouth.edu",
         callback: async ({ credential }: { credential: string }) => {
           const r = await fetch("/api/auth/google", { method: "POST", body: JSON.stringify({ credential }) });
           if (r.ok) refresh(); else setErr((await r.json()).error);

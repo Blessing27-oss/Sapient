@@ -1,13 +1,14 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
-import Graph from "@/components/Graph";
 import ProfessorGate from "@/components/ProfessorGate";
 import ShareCard from "@/components/ShareCard";
+import TopicMapView from "@/components/TopicMapView";
 import { LABEL_TEXT } from "@/lib/engine";
-import type { Concept, Insight, Label, Question } from "@/lib/types";
+import { fallbackTopicMap } from "@/lib/topicMap";
+import type { Concept, Edge, Insight, Label, Question, TopicMap } from "@/lib/types";
 
 type Dash = {
-  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
+  room: { code: string; title: string; concepts: Concept[]; edges: Edge[]; topicMap?: TopicMap; questions: Question[] };
   students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
   challengeGroups: { question: Question; reasons: { student: string; reason: string }[] }[];
@@ -63,11 +64,16 @@ function Dashboard({ code }: { code: string }) {
 
       <section className="space-y-2">
         <h2 className="text-xl font-bold">Class concept map</h2>
-        <Graph
-          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac" }))}
-          edges={d.room.edges}
+        <TopicMapView
+          title={d.room.title}
+          map={d.room.topicMap ?? fallbackTopicMap(d.room.concepts, d.room.edges as Edge[])}
+          styleFor={(n) => {
+            const r = d.classRows.find((x) => x.conceptId === n.conceptId);
+            if (!r) return { fill: "#fafaf9", stroke: "#d6d3d1" };
+            return { fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", stroke: "#78716c" };
+          }}
         />
-        <p className="text-xs text-stone-500">Red: at least half of students who directly answered missed it · Amber: some missed · Green: none missed · Grey: no direct answers yet.</p>
+        <p className="text-xs text-stone-500">Assessed concepts are coloured from direct answers only. Red: at least half of students who directly answered missed it · Amber: some missed · Green: none missed · Grey: no direct answers yet · Pale with light border: lecture context, not assessed.</p>
       </section>
 
       {d.challengeGroups.length > 0 && (

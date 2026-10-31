@@ -1,8 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-// The only account allowed to act as professor in this hackathon build.
-export const PROFESSOR_EMAIL = "mitchelle.k.ngare.27@dartmouth.edu";
+// Explicit professor allowlist, shared by sign-in and session validation.
+const PROFESSOR_EMAILS = new Set([
+  "mitchelle.k.ngare.27@dartmouth.edu",
+  "kangorgodwin@gmail.com",
+]);
+export const isAuthorizedProfessor = (email: string) => PROFESSOR_EMAILS.has(email.trim().toLowerCase());
 const COOKIE = "kg_session";
 const SECRET = process.env.SESSION_SECRET || ((globalThis as { __kgSecret?: string }).__kgSecret ??= randomBytes(32).toString("hex"));
 
@@ -24,7 +28,7 @@ export async function isProfessor(): Promise<boolean> {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
-    return p.email === PROFESSOR_EMAIL && p.exp > Date.now();
+    return typeof p.email === "string" && isAuthorizedProfessor(p.email) && p.exp > Date.now();
   } catch { return false; }
 }
 // Use at the top of professor-only routes: `const deny = await requireProfessor(); if (deny) return deny;`

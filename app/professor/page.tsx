@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Graph from "@/components/Graph";
 import ProfessorGate from "@/components/ProfessorGate";
 import ShareCard from "@/components/ShareCard";
-import type { Concept, Edge, Question } from "@/lib/types";
+import TopicMapView from "@/components/TopicMapView";
+import { fallbackTopicMap } from "@/lib/topicMap";
+import type { Concept, Edge, Question, TopicMap } from "@/lib/types";
 
-type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; note?: string };
+type Draft = { title: string; concepts: Concept[]; edges: Edge[]; topicMap?: TopicMap; questions: Question[]; note?: string };
 
 export default function ProfessorPage() {
   return <ProfessorGate><Workspace /></ProfessorGate>;
@@ -87,6 +88,11 @@ function Workspace() {
       concepts: draft.concepts.filter((c) => c.id !== id),
       edges: draft.edges.filter((e) => e.source !== id && e.target !== id),
       questions: draft.questions.map((q) => ({ ...q, conceptIds: q.conceptIds.filter((x) => x !== id) })).filter((q) => q.conceptIds.length),
+      // The topic-map node stays as lecture context; it just stops being an assessed concept.
+      topicMap: draft.topicMap && {
+        ...draft.topicMap,
+        sections: draft.topicMap.sections.map((s) => ({ ...s, nodes: s.nodes.map((n) => (n.conceptId === id ? { ...n, conceptId: undefined } : n)) })),
+      },
     });
     setSel(null);
   };
@@ -128,22 +134,19 @@ function Workspace() {
 
       <div className={tab === "map" ? "" : "hidden"}>
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-2">
-            <Graph
-              nodes={draft.concepts.map((c) => ({ id: c.id, name: c.name, fill: c.foundational ? "#bbf7d0" : "#fff", ring: !c.verified }))}
-              edges={draft.edges}
-              selected={sel}
-              onSelect={(id) => { setSel(id); if (id) setSelEdge(null); }}
-              selectedEdge={selEdge}
-              onSelectEdge={(i) => { setSelEdge(i); if (i !== null) setSel(null); }}
-              onConnect={connect}
-              onAddNode={() => addConcept()}
-            />
-            <p className="text-xs text-stone-500">
-              <b>Drag</b> a concept to move it · drag its green <b>+</b> onto another concept to connect · click a line to select, then press Delete · <b>double-click</b> empty space to add a concept. Dashed outline = not yet verified. Lines mean “possibly relevant for assessment”, not “mastery of one proves the other”.
-            </p>
-          </div>
-          <div className="card space-y-3 self-start">
+          <TopicMapView
+            title={draft.title}
+            map={draft.topicMap ?? fallbackTopicMap(draft.concepts, draft.edges)}
+            selectedConceptId={sel}
+            onSelectConcept={(id) => { setSel(id); setSelEdge(null); }}
+            styleFor={(n) => {
+              const c = draft.concepts.find((x) => x.id === n.conceptId);
+              if (!c) return { fill: "#fafaf9", stroke: "#d6d3d1" };
+              return { fill: c.foundational ? "#dcfce7" : "#ffffff", stroke: "#78716c", dashed: !c.verified };
+            }}
+            legend={<span>Bordered boxes are assessed concepts (click to edit; dashed = not yet verified) · grey boxes are lecture context</span>}
+          />
+          <div className="card space-y-3 self-start lg:sticky lg:top-4">
             {se && selEdge !== null ? (
               <>
                 <p className="text-sm font-semibold">Relationship</p>
@@ -178,7 +181,16 @@ function Workspace() {
                 </div>
                 <button className="text-sm text-red-600 hover:underline" onClick={() => removeConcept(sc.id)}>Delete concept</button>
               </>
-            ) : <p className="text-sm text-stone-500">Select a concept on the map.</p>}
+            ) : (
+              <>
+                <p className="text-sm text-stone-500">Select a concept on the map, or here:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.concepts.map((c) => (
+                    <button key={c.id} className={`chip ${c.verified ? "" : "border border-dashed border-stone-400"}`} onClick={() => { setSel(c.id); setSelEdge(null); }}>{c.name}</button>
+                  ))}
+                </div>
+              </>
+            )}
             <button className="btn-ghost w-full" onClick={() => addConcept()}>+ Add concept</button>
           </div>
         </div>
