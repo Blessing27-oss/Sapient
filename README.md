@@ -1,11 +1,11 @@
-# KnowGap
+# Sapient
 
 Find what students don't know, before the exam. A professor-controlled adaptive diagnostic.
 
     npm install && npm run dev      # http://localhost:3000
     npm test                        # engine tests
 
-Optional: `ANTHROPIC_API_KEY=...` enables PDF -> concepts/questions extraction. Use the sample Fourier lesson without a key. PDF generation reports errors explicitly and never silently substitutes sample content. PDF text is extracted page by page, so source citations retain the original page numbers.
+Set `ANTHROPIC_API_KEY=...` to enable PDF -> concepts/questions extraction. The professor workspace requires a PDF upload. PDF generation reports errors explicitly and never silently substitutes sample content. PDF text is extracted page by page, so source citations retain the original page numbers.
 
 Professor access: only `mitchelle.k.ngare.27@dartmouth.edu` (`lib/auth.ts`). Set `GOOGLE_CLIENT_ID` (a Google
 OAuth web client with your origin authorised) for real Google sign-in, verified server-side. Also set

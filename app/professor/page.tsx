@@ -73,8 +73,7 @@ function Workspace() {
           <span className="text-sm text-stone-500">Lecture notes or slides</span>
           <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
         </label>
-        {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-        <button className="text-sm text-stone-500 underline hover:text-[#00693e]" disabled={busy} onClick={() => generate(null)}>No PDF handy? Try the sample Fourier lesson</button>
+        {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
       </div>
     );
 
