@@ -1,4 +1,4 @@
-import { requireProfessor } from "@/lib/auth";
+import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
 import { QUESTION_BUDGET, gradeResponse, selectNextQuestion, classDiagnostic, classify, computeState, validResponses } from "@/lib/engine";
 import { getRoom } from "@/lib/store";
 
@@ -6,7 +6,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ code: stri
   const deny = await requireProfessor();
   if (deny) return deny;
   const room = await getRoom((await params).code);
-  if (!room) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!room || !ownsRoom(room, await currentUser())) return Response.json({ error: "Not found" }, { status: 404 });
   const students = room.students.map((s) => {
     const valid = validResponses(room, s);
     const st = computeState(room, valid);
@@ -29,6 +29,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ code: stri
     }));
   return Response.json({
     room: { code: room.code, title: room.title, concepts: room.concepts, edges: room.edges, questions: room.questions },
+    answeredQuestionIds: [...new Set(room.students.flatMap((s) => s.responses.map((r) => r.questionId)))],
     students, classRows: classDiagnostic(room), challengeGroups, insights: room.insights,
   });
 }

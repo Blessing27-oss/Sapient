@@ -1,4 +1,4 @@
-import { requireProfessor } from "@/lib/auth";
+import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
 import { withDB } from "@/lib/store";
 import { reviseQuestion } from "@/lib/moderate";
 import type { QuestionPatch, RevisionMode } from "@/lib/moderate";
@@ -7,6 +7,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const deny = await requireProfessor();
   if (deny) return deny;
   const { code } = await params;
+  const user = await currentUser();
   const { questionId, action, patch, mode = "reset" } = (await req.json()) as {
     questionId: string; action: "invalidate" | "revise" | "dismiss"; patch?: QuestionPatch; mode?: RevisionMode;
   };
@@ -14,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const result = await withDB((db) => {
     const room = db[code.toUpperCase()];
     const q = room?.questions.find((x) => x.id === questionId);
-    if (!room || !q) return { error: "Not found", status: 404 };
+    if (!room || !q || !ownsRoom(room, user)) return { error: "Not found", status: 404 };
     if (action === "revise") {
       if (!patch) return { error: "Provide a revision", status: 400 };
       const error = reviseQuestion(room, q, patch, mode);

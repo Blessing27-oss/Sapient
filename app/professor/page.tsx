@@ -1,12 +1,23 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Graph from "@/components/Graph";
 import ProfessorGate from "@/components/ProfessorGate";
+import QuestionList from "@/components/QuestionList";
 import ShareCard from "@/components/ShareCard";
+import { questionProblems } from "@/lib/questions";
+import { PALETTE } from "@/lib/ui";
 import type { Concept, Edge, Question } from "@/lib/types";
 
 type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; note?: string };
+
+// Removing a concept also removes its connections and detaches it from questions (a question left with no concept is dropped).
+const dropConcept = (d: Draft, id: string): Draft => ({
+  ...d,
+  concepts: d.concepts.filter((c) => c.id !== id),
+  edges: d.edges.filter((e) => e.source !== id && e.target !== id),
+  questions: d.questions.map((q) => ({ ...q, conceptIds: q.conceptIds.filter((x) => x !== id) })).filter((q) => q.conceptIds.length),
+});
 
 export default function ProfessorPage() {
   return <ProfessorGate><Workspace /></ProfessorGate>;
@@ -18,19 +29,29 @@ function Workspace() {
   const [tab, setTab] = useState<"map" | "questions">("map");
   const [sel, setSel] = useState<string | null>(null);
   const [selEdge, setSelEdge] = useState<number | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [focusName, setFocusName] = useState(0); // bumped when a concept is added from the button, to jump straight to renaming it
+  useEffect(() => { if (focusName) { nameRef.current?.focus(); nameRef.current?.select(); } }, [focusName]);
   const [err, setErr] = useState("");
   const [code, setCode] = useState("");
+  const [rooms, setRooms] = useState<{ code: string; title: string; students: number }[]>([]);
+  useEffect(() => { fetch("/api/me/rooms").then((r) => r.json()).then((j) => setRooms(j.rooms ?? [])); }, []);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (selEdge === null || (e.key !== "Delete" && e.key !== "Backspace") || /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
-      setDraft((d) => d && { ...d, edges: d.edges.filter((_, i) => i !== selEdge) });
-      setSelEdge(null);
+      if ((e.key !== "Delete" && e.key !== "Backspace") || /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
+      if (selEdge !== null) {
+        setDraft((d) => d && { ...d, edges: d.edges.filter((_, i) => i !== selEdge) });
+        setSelEdge(null);
+      } else if (sel) {
+        setDraft((d) => d && dropConcept(d, sel));
+        setSel(null);
+      }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [selEdge]);
+  }, [selEdge, sel]);
 
   async function generate(file?: File | null) {
     setBusy(true); setErr("");
@@ -75,6 +96,17 @@ function Workspace() {
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
           </label>
           {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
+          {rooms.length > 0 && (
+            <div className="card space-y-2">
+              <h2 className="text-lg font-bold">Your rooms</h2>
+              {rooms.map((r) => (
+                <Link key={r.code} href={`/dashboard/${r.code}`} className="flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-sm hover:border-[#00693e] hover:bg-green-50">
+                  <span className="font-medium">{r.title}</span>
+                  <span className="text-stone-500"><span className="font-mono">{r.code}</span> · {r.students} student{r.students === 1 ? "" : "s"}</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="card space-y-5">
@@ -100,14 +132,7 @@ function Workspace() {
   const setQ = (id: string, p: Partial<Question>) => patch({ questions: draft.questions.map((q) => (q.id === id ? { ...q, ...p } : q)) });
   const nameOf = (id: string) => draft.concepts.find((c) => c.id === id)?.name ?? id;
   const sc = draft.concepts.find((c) => c.id === sel);
-  const removeConcept = (id: string) => {
-    patch({
-      concepts: draft.concepts.filter((c) => c.id !== id),
-      edges: draft.edges.filter((e) => e.source !== id && e.target !== id),
-      questions: draft.questions.map((q) => ({ ...q, conceptIds: q.conceptIds.filter((x) => x !== id) })).filter((q) => q.conceptIds.length),
-    });
-    setSel(null);
-  };
+  const removeConcept = (id: string) => { setDraft(dropConcept(draft, id)); setSel(null); };
   const addConcept = (): string => {
     const id = `c${Date.now().toString(36)}`;
     patch({ concepts: [...draft.concepts, { id, name: "New concept", importance: 1, verified: true }] });
@@ -120,9 +145,11 @@ function Workspace() {
     setSelEdge(draft.edges.length);
   };
   const se = selEdge !== null ? draft.edges[selEdge] : undefined;
-  const approved = draft.questions.filter((q) => q.approved).length;
+  const conceptIds = draft.concepts.map((c) => c.id);
+  const approved = draft.questions.filter((q) => q.approved && !questionProblems(q, conceptIds).length).length;
 
   async function publish() {
+    if (approved === 0 && !confirm("No questions are approved yet, so students will have nothing to answer until you approve or add some from the dashboard. Publish anyway?")) return;
     setErr("");
     const r = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
     const j = await r.json();
@@ -148,24 +175,29 @@ function Workspace() {
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-2">
             <Graph
-              nodes={draft.concepts.map((c) => ({ id: c.id, name: c.name, fill: c.foundational ? "#bbf7d0" : "#fff", ring: !c.verified }))}
+              nodes={draft.concepts.map((c, i) => ({ id: c.id, name: (c.foundational ? "★ " : "") + c.name, editName: c.name, fill: PALETTE[i % PALETTE.length].fill, accent: PALETTE[i % PALETTE.length].accent, flag: c.verified ? undefined : "#f59e0b" }))}
+              solidRoot
               edges={draft.edges}
               selected={sel}
               onSelect={(id) => { setSel(id); if (id) setSelEdge(null); }}
               selectedEdge={selEdge}
               onSelectEdge={(i) => { setSelEdge(i); if (i !== null) setSel(null); }}
               onConnect={connect}
+              onDeleteNode={removeConcept}
+              onDeleteEdge={(i) => { setDraft({ ...draft, edges: draft.edges.filter((_, j) => j !== i) }); setSelEdge(null); }}
+              onRename={(id, name) => setConcept(id, { name })}
               onAddNode={() => addConcept()}
             />
             <p className="text-xs text-stone-500">
-              <b>Drag</b> a concept to move it · drag its green <b>+</b> onto another concept to connect · click a line to select, then press Delete · <b>double-click</b> empty space to add a concept. Dashed outline = not yet verified. Lines mean “possibly relevant for assessment”, not “mastery of one proves the other”.
+              <b>Drag</b> a concept to move it · drag its green <b>+</b> onto another concept to draw an arrow · hover an arrow and click its red ✕ to delete it (or select it and press <b>Delete</b>) · <b>double-click</b> a concept to rename it · <b>double-click</b> empty space to add one. The top concept is the main topic; arrows lead to what builds on it. ★ = foundational, amber dot = not yet verified. Arrows show teaching order only and don’t change how scores are inferred.
             </p>
           </div>
           <div className="card space-y-3 self-start">
             {se && selEdge !== null ? (
               <>
                 <p className="text-sm font-semibold">Relationship</p>
-                <p className="text-sm">{nameOf(se.source)} <span className="text-stone-400">↔</span> {nameOf(se.target)}</p>
+                <p className="text-sm font-medium">{nameOf(se.source)} <span className="text-stone-400">→</span> {nameOf(se.target)}</p>
+                <button className="btn-ghost w-full" onClick={() => patch({ edges: draft.edges.map((x, i) => (i === selEdge ? { ...x, source: x.target, target: x.source } : x)) })}>⇄ Flip direction</button>
                 <label className="block text-sm">Strength: {se.weight.toFixed(1)}
                   <input type="range" min={0.1} max={0.5} step={0.1} className="w-full accent-[#00693e]" value={se.weight}
                     onChange={(e) => patch({ edges: draft.edges.map((x, i) => (i === selEdge ? { ...x, weight: Number(e.target.value) } : x)) })} />
@@ -176,7 +208,7 @@ function Workspace() {
             ) : sc ? (
               <>
                 {sc.sourcePage && <p className="text-xs text-stone-500">Source: page {sc.sourcePage}</p>}
-                <input className="input font-semibold" value={sc.name} onChange={(e) => setConcept(sc.id, { name: e.target.value })} />
+                <input ref={nameRef} className="input font-semibold" value={sc.name} onChange={(e) => setConcept(sc.id, { name: e.target.value })} />
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sc.verified} onChange={(e) => setConcept(sc.id, { verified: e.target.checked })} /> I’ve verified this concept</label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!sc.foundational} onChange={(e) => setConcept(sc.id, { foundational: e.target.checked, importance: e.target.checked ? 1 : sc.importance })} /> Foundational</label>
                 <label className="block text-sm">Importance: {sc.importance.toFixed(1)}
@@ -197,44 +229,17 @@ function Workspace() {
                 <button className="text-sm text-red-600 hover:underline" onClick={() => removeConcept(sc.id)}>Delete concept</button>
               </>
             ) : <p className="text-sm text-stone-500">Select a concept on the map.</p>}
-            <button className="btn-ghost w-full" onClick={() => addConcept()}>+ Add concept</button>
+            <button className="btn-ghost w-full" onClick={() => { addConcept(); setFocusName((n) => n + 1); }}>+ Add concept</button>
           </div>
         </div>
       </div>
 
-      {tab === "questions" && (
-        <div className="space-y-4">
-          <div className="flex justify-end"><button className="btn-ghost" onClick={() => patch({ questions: draft.questions.map((q) => ({ ...q, approved: true })) })}>Approve all</button></div>
-          {draft.questions.map((q, n) => (
-            <div key={q.id} className={`card space-y-3 ${q.approved ? "!border-[#00693e]" : ""}`}>
-              <div className="flex items-start justify-between gap-3">
-                <span className="text-xs font-semibold text-stone-400">Q{n + 1}{q.sourcePage ? ` · p.${q.sourcePage}` : ""}</span>
-                <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={!!q.approved} onChange={(e) => setQ(q.id, { approved: e.target.checked })} /> Approved</label>
-              </div>
-              <textarea className="input" rows={2} value={q.text} onChange={(e) => setQ(q.id, { text: e.target.value })} />
-              {q.options.map((o, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input type="radio" className="accent-[#00693e]" checked={q.correctAnswer === i} onChange={() => setQ(q.id, { correctAnswer: i })} title="Mark correct" />
-                  <input className={`input ${q.correctAnswer === i ? "!border-green-500 bg-green-50" : ""}`} value={o} onChange={(e) => setQ(q.id, { options: q.options.map((x, j) => (j === i ? e.target.value : x)) })} />
-                </div>
-              ))}
-              <input className="input" placeholder="Explanation shown to students" value={q.explanation ?? ""} onChange={(e) => setQ(q.id, { explanation: e.target.value })} />
-              <div className="flex flex-wrap gap-1.5">
-                {draft.concepts.map((c) => {
-                  const on = q.conceptIds.includes(c.id);
-                  return <button key={c.id} onClick={() => setQ(q.id, { conceptIds: on ? q.conceptIds.filter((x) => x !== c.id) : [...q.conceptIds, c.id] })} className={`chip ${on ? "!bg-[#00693e] !text-white" : ""}`}>{c.name}</button>;
-                })}
-              </div>
-              <button className="text-sm text-red-600 hover:underline" onClick={() => patch({ questions: draft.questions.filter((x) => x.id !== q.id) })}>Remove question</button>
-            </div>
-          ))}
-        </div>
-      )}
+      {tab === "questions" && <QuestionList questions={draft.questions} concepts={draft.concepts} onChange={(questions) => patch({ questions })} />}
 
       <div className="fixed inset-x-0 bottom-0 border-t border-stone-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-          <p className="text-sm text-stone-600">{approved === 0 ? "Approve at least one question to publish." : `${approved} approved question${approved > 1 ? "s" : ""} will be used.`}{err && <span className="ml-2 text-red-600">{err}</span>}</p>
-          <button className="btn" disabled={!approved} onClick={publish}>Publish &amp; get student link →</button>
+          <p className="text-sm text-stone-600">{approved === 0 ? "No questions approved yet — you can still publish." : `${approved} approved question${approved > 1 ? "s" : ""} will be used.`}{err && <span className="ml-2 text-red-600">{err}</span>}</p>
+          <button className="btn" onClick={publish}>Publish &amp; get student link →</button>
         </div>
       </div>
     </div>

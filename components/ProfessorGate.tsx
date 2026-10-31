@@ -1,29 +1,35 @@
 "use client";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export default function ProfessorGate({ children }: { children: React.ReactNode }) {
-  const [professor, setProfessor] = useState<boolean | null>(null);
-  const [err, setErr] = useState("");
-  const [word, setWord] = useState("");
-  const refresh = () => fetch("/api/auth/me").then((r) => r.json()).then((m) => setProfessor(m.professor));
-  useEffect(() => { refresh(); }, []);
+type User = { id: string; name: string; role: "professor" | "student" };
 
-  async function login() {
-    const r = await fetch("/api/auth/login", { method: "POST", body: JSON.stringify({ word }) });
-    if (r.ok) { setErr(""); refresh(); } else setErr((await r.json()).error);
-  }
+function Gate({ role, children }: { role: User["role"]; children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.json()).then((m) => {
+      setUser(m.user);
+      if (!m.user) router.replace(`/login?role=${role}&next=${encodeURIComponent(pathname + location.search)}`);
+    });
+  }, [role, pathname, router]);
 
-  if (professor === null) return <p className="text-stone-500">Loading…</p>;
-  if (professor) return <>{children}</>;
-  return (
-    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#00693e] text-xl text-white">🔒</div>
-      <h1 className="text-xl font-semibold">Professor sign-in</h1>
-      <div className="mt-6 flex flex-col gap-3">
-        <input className="input" type="password" placeholder="Enter the word" value={word} onChange={(e) => setWord(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} />
-        <button className="btn w-full" onClick={login}>Continue</button>
-        {err && <p className="text-sm text-red-600">{err}</p>}
+  if (user === undefined || user === null) return <p className="text-stone-500">Loading…</p>;
+  if (user.role !== role)
+    return (
+      <div className="mx-auto mt-10 max-w-md rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-xl font-semibold">This page is for {role}s</h1>
+        <p className="mt-2 text-sm text-stone-500">You’re signed in as a {user.role} ({user.name}). Sign out to use a {role} account.</p>
+        <button className="btn mt-5" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); router.replace(`/login?role=${role}`); }}>Sign out</button>
       </div>
-    </div>
-  );
+    );
+  return <>{children}</>;
+}
+
+export default function ProfessorGate({ children }: { children: React.ReactNode }) {
+  return <Gate role="professor">{children}</Gate>;
+}
+export function StudentGate({ children }: { children: React.ReactNode }) {
+  return <Gate role="student">{children}</Gate>;
 }
