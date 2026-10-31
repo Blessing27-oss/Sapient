@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isCorrect, selectNextQuestion } from "@/lib/engine";
-import { getRoom, newId } from "@/lib/store";
+import { isCorrect, selectNextQuestion } from "@backend/lib/engine";
+import { getRoom, newId } from "@backend/lib/store";
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const room = getRoom((await params).code);

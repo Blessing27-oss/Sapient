@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractText, getDocumentProxy } from "unpdf";
-import { generateMaterial } from "@/lib/generate";
-import { sampleMaterial } from "@/lib/sample";
+import { generateMaterial } from "@backend/lib/generate";
+import { sampleMaterial } from "@backend/lib/sample";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;

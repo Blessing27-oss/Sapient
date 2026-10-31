@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRoom, newId } from "@/lib/store";
+import { getRoom, newId } from "@backend/lib/store";
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const room = getRoom((await params).code);

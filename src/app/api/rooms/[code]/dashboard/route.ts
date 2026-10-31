@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { classSummary } from "@/lib/engine";
-import { getRoom } from "@/lib/store";
+import { classSummary } from "@backend/lib/engine";
+import { getRoom } from "@backend/lib/store";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ code: string }> }) {
   const room = getRoom((await params).code);

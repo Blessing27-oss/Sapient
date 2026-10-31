@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getRoom } from "@/lib/store";
-import type { Challenge, Question } from "@/lib/types";
+import { getRoom } from "@backend/lib/store";
+import type { Challenge, Question } from "@backend/lib/types";
 
 type Body =
   | { action: "dismiss"; challengeId: string }

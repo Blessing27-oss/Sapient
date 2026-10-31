@@ -1,9 +1,9 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import { Button, Card, ErrorNote, Header, LABEL_STYLES, LabelBadge } from "@/components/ui";
-import type { ConceptSummary } from "@/lib/engine";
-import type { Challenge, Concept, DiagnosticLabel, Question } from "@/lib/types";
+import { Button, Card, ErrorNote, Header, LABEL_STYLES, LabelBadge } from "@backend/components/ui";
+import type { ConceptSummary } from "@backend/lib/engine";
+import type { Challenge, Concept, DiagnosticLabel, Question } from "@backend/lib/types";
 
 type Dashboard = {
   code: string;

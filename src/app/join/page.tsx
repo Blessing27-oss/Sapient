@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { Button, Card, ErrorNote, Header } from "@/components/ui";
+import { Button, Card, ErrorNote, Header } from "@backend/components/ui";
 
 function JoinForm() {
   const router = useRouter();

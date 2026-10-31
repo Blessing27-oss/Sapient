@@ -1,8 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import { Button, Card, ErrorNote, Header, LabelBadge } from "@/components/ui";
-import type { DiagnosticLabel, PublicQuestion } from "@/lib/types";
+import { Button, Card, ErrorNote, Header, LabelBadge } from "@backend/components/ui";
+import type { DiagnosticLabel, PublicQuestion } from "@backend/lib/types";
 
 type Answered = {
   question: PublicQuestion;

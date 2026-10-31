@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createRoom, QUESTION_BUDGET } from "@/lib/store";
-import type { CourseMaterial } from "@/lib/types";
+import { createRoom, QUESTION_BUDGET } from "@backend/lib/store";
+import type { CourseMaterial } from "@backend/lib/types";
 
 export async function POST(req: Request) {
   const { material } = (await req.json()) as { material: CourseMaterial };

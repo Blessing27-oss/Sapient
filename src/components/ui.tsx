@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { DiagnosticLabel } from "@/lib/types";
+import type { DiagnosticLabel } from "@backend/lib/types";
 
 export function Header({ subtitle, right }: { subtitle?: string; right?: React.ReactNode }) {
   return (

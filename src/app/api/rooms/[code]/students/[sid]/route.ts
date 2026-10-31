@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { diagnose, isCorrect, selectNextQuestion } from "@/lib/engine";
-import { getRoom, publicQuestion } from "@/lib/store";
+import { diagnose, isCorrect, selectNextQuestion } from "@backend/lib/engine";
+import { getRoom, publicQuestion } from "@backend/lib/store";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ code: string; sid: string }> }) {
   const { code, sid } = await params;

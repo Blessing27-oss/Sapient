@@ -1,0 +1,8 @@
+@import "tailwindcss";
+body { background: #faf9f6; color: #1c1917; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+h1, h2 { font-family: Georgia, "Times New Roman", serif; letter-spacing: -0.01em; }
+.btn { @apply inline-flex items-center justify-center rounded-lg bg-[#00693e] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#014d2e] disabled:cursor-not-allowed disabled:opacity-40; }
+.btn-ghost { @apply inline-flex items-center justify-center rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-100; }
+.card { @apply rounded-2xl border border-stone-200 bg-white p-5 shadow-sm; }
+.input { @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#00693e] focus:ring-2 focus:ring-[#00693e]/20; }
+.chip { @apply rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-700; }

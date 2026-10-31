@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Header } from "@/components/ui";
+import { Header } from "@backend/components/ui";
 
 export default function Home() {
   return (
