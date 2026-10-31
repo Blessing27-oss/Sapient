@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addMapLink, addMapNode, connectMapNodes, crossRefs, fallbackTopicMap, type RawTopicMap, removeMapEdge, removeMapLink, removeMapNode, sanitizeTopicMap, sectionConnections, updateMapEdge, updateMapNode } from "./topicMap.ts";
+import { addMapLink, addMapNode, cleanSavedTopicMap, connectMapNodes, crossRefs, moveMapNode, resetMapLayout, fallbackTopicMap, type RawTopicMap, removeMapEdge, removeMapLink, removeMapNode, sanitizeTopicMap, sectionConnections, updateMapEdge, updateMapNode } from "./topicMap.ts";
 
 const node = (id: string, label: string, conceptId = "", details: string[] = []) => ({ id, label, details, conceptId });
 const edge = (source: string, target: string, style = "solid", label = "") => ({ source, target, style, label });
@@ -82,4 +82,31 @@ test("editing keeps the map one graph: renames reach every copy, deletes clean u
   map = removeMapLink(removeMapEdge(map, "s1", 0), 0);
   assert.equal(map.sections[0].edges.length, 1);
   assert.equal(map.links.length, 0);
+});
+
+test("dragged positions are kept per graph and per drawing direction, and can be reset", () => {
+  let map = sanitizeTopicMap(raw(), new Set(["c1"]))!;
+  map = moveMapNode(map, "s1", "strep", { x: 120.4, y: 80.6 }, "TD");
+  map = moveMapNode(map, "s1", "primates", { x: 10, y: 20 }, "TD");
+  assert.deepEqual(map.sections[0].layout, { direction: "TD", positions: { strep: { x: 120, y: 81 }, primates: { x: 10, y: 20 } } });
+  assert.equal(map.sections[1].layout, undefined, "other graphs untouched");
+  map = moveMapNode(map, "s1", "strep", { x: 5, y: 5 }, "LR");
+  assert.deepEqual(map.sections[0].layout, { direction: "LR", positions: { strep: { x: 5, y: 5 } } }, "switching direction starts over");
+  map = resetMapLayout(map, "s1");
+  assert.equal(map.sections[0].layout, undefined);
+});
+
+test("a map saved from the editor keeps one-box graphs and valid hand-placed positions only", () => {
+  let map = sanitizeTopicMap(raw(), new Set(["c1", "c2"]))!;
+  map = moveMapNode(map, "s1", "strep", { x: 40, y: 50 }, "TD");
+  map = removeMapNode(map, "comb");
+  const saved = JSON.parse(JSON.stringify(map));
+  saved.sections[0].layout.positions.ghost = { x: 1, y: 2 };
+  saved.sections[0].layout.positions.primates = { x: "nope", y: 2 };
+  const clean = cleanSavedTopicMap(saved, new Set(["c1", "c2"]))!;
+  assert.equal(clean.sections.length, 2, "graph 2 survives with a single box");
+  assert.deepEqual(clean.sections[1].nodes.map((n) => n.id), ["strep"]);
+  assert.deepEqual(clean.sections[0].layout, { direction: "TD", positions: { strep: { x: 40, y: 50 } } });
+  assert.equal(cleanSavedTopicMap({ sections: [] }, new Set()), undefined);
+  assert.equal(cleanSavedTopicMap("junk", new Set()), undefined);
 });

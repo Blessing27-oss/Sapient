@@ -17,7 +17,9 @@ export type Question = {
 export type MapNode = { id: string; label: string; details: string[]; conceptId?: string };
 // solid = classification or a relationship the material states; dotted = related concepts.
 export type MapEdge = { source: string; target: string; style: "solid" | "dotted"; label?: string };
-export type MapSection = { id: string; title: string; direction: "TD" | "LR"; nodes: MapNode[]; edges: MapEdge[]; sources: string; note: string };
+// layout holds boxes the professor dragged, in the coordinates of the direction the graph was drawn in.
+export type SectionLayout = { direction: "TD" | "LR"; positions: Record<string, { x: number; y: number }> };
+export type MapSection = { id: string; title: string; direction: "TD" | "LR"; nodes: MapNode[]; edges: MapEdge[]; sources: string; note: string; layout?: SectionLayout };
 // Sections form one knowledge graph: a node id reused in several sections is the same idea,
 // and links connect nodes that live in different sections.
 export type TopicMap = { sourceNote: string; sections: MapSection[]; links: MapEdge[]; studyRoute: string };
@@ -47,7 +49,12 @@ export type Room = {
   students: Student[];
   challenges: Challenge[];
   insights: Insight[];
+  // Anonymous record of what students ask the study helper: a paraphrased topic, never their wording or name.
+  asked?: AskedTopic[];
+  askSalt?: string;
 };
+// asker: a salted per-room hash, used only to count distinct students; never shown or reversible to a name.
+export type AskedTopic = { asker: string; conceptIds: string[]; topic: string };
 
 export type ConceptState = {
   direct: number; // net direct evidence

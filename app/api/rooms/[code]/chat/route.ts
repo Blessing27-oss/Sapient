@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { after } from "next/server";
+import { recordQuestion } from "@/lib/asked";
 import { requireStudent } from "@/lib/auth";
 import { getRoomSources, retrieveSourceChunks } from "@/lib/sources";
 import { getRoom } from "@/lib/store";
@@ -21,6 +23,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   if ("error" in checked) return Response.json({ error: checked.error }, { status: 400 });
 
   const excerpts = retrieveSourceChunks(await getRoomSources(room, auth.user), checked.messages.at(-1)!.content);
+  // After the reply is sent: store an anonymous, paraphrased topic for the professor's dashboard.
+  // Only the topic is kept; the wording and the student's identity are not.
+  const asked = checked.messages.at(-1)!;
+  if (asked.role === "user") {
+    after(() => recordQuestion(room.code, student.id, asked.content).catch((err) => console.error("asked-topic tagging failed", err instanceof Error ? err.message : err)));
+  }
   const client = new Anthropic();
   const stream = client.beta.messages.stream({
     model: "claude-opus-5-5",

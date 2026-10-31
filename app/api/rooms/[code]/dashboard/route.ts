@@ -1,5 +1,6 @@
 import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
 import { QUESTION_BUDGET, gradeResponse, selectNextQuestion, classDiagnostic, classify, computeState, validResponses } from "@/lib/engine";
+import { summarizeAsked } from "@/lib/asked";
 import { getRoom } from "@/lib/store";
 
 export async function GET(_: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -31,5 +32,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ code: stri
     room: { code: room.code, title: room.title, concepts: room.concepts, edges: room.edges, topicMap: room.topicMap, layout: room.layout, questions: room.questions },
     answeredQuestionIds: [...new Set(room.students.flatMap((s) => s.responses.map((r) => r.questionId)))],
     students, classRows: classDiagnostic(room), challengeGroups, insights: room.insights,
+    // Aggregated, paraphrased and anonymous; the per-student keys never leave the server.
+    asked: summarizeAsked(room),
   });
 }

@@ -332,6 +332,11 @@ function Results({ data, name, title, code, sid }: { data: Extract<Next, { done:
 
         <div className={chatOpen ? "lg:sticky lg:top-6" : "contents"}>
           <StudyChat code={code} studentId={sid} reviewConcepts={toReview.map((d) => d.name)} ask={ask} collapsed={!chatOpen} onCollapsedChange={(collapsed) => setChatOpen(!collapsed)} />
+          {chatOpen && (
+            <p className="mt-2 px-1 text-xs text-stone-500">
+              🔒 Your professor sees only anonymous, reworded topics the class asks about — never your name or your exact words.
+            </p>
+          )}
         </div>
       </div>
     </div>

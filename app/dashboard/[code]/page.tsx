@@ -1,11 +1,13 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
-import TopicMapView from "@/components/TopicMapView";
-import { fallbackTopicMap } from "@/lib/topicMap";
+import MapEditPanel from "@/components/MapEditPanel";
+import TopicMapView, { type MapEditor, type MapSelection } from "@/components/TopicMapView";
+import { addMapNode, connectMapNodes, fallbackTopicMap, moveMapNode, removeMapEdge, removeMapNode, resetMapLayout, updateMapNode } from "@/lib/topicMap";
 import ProfessorGate from "@/components/ProfessorGate";
 import QuestionList from "@/components/QuestionList";
 import { BarRows, Panel, StatTile, type BarRow } from "@/components/charts";
 import ShareCard from "@/components/ShareCard";
+import type { AskedSummary } from "@/lib/asked";
 import { isLive } from "@/lib/questions";
 import type { Concept, Edge, Insight, Label, Question, TopicMap } from "@/lib/types";
 
@@ -16,6 +18,7 @@ type Dash = {
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
   challengeGroups: { question: Question; reasons: { student: string; reason: string }[] }[];
   insights: Insight[];
+  asked: { groups: AskedSummary[]; hidden: number };
 };
 const GROUPS: { label: Label; title: string; chip: string }[] = [
   { label: "strength", title: "Showed they know", chip: "bg-[#e3f1eb] fold-text" },
@@ -38,6 +41,11 @@ function Dashboard({ code }: { code: string }) {
   const [qDirty, setQDirty] = useState(false);
   const [qSaved, setQSaved] = useState(false);
   useEffect(() => { if (d && !qDirty) setQDraft(d.room.questions.filter((q) => !d.answeredQuestionIds.includes(q.id))); }, [d, qDirty]);
+
+  // Lecture-map editing: a local copy while editing, so the 3s refresh can't overwrite unsaved changes.
+  const [mapDraft, setMapDraft] = useState<TopicMap | null>(null);
+  const [mapSel, setMapSel] = useState<MapSelection>(null);
+  const [mapSaving, setMapSaving] = useState(false);
 
   const [error, setError] = useState("");
   const [revisionMode, setRevisionMode] = useState<"regrade" | "reset">("regrade");
@@ -62,6 +70,34 @@ function Dashboard({ code }: { code: string }) {
     } catch (err) { setError(err instanceof Error ? err.message : "Could not save changes."); return false; }
   };
   if (!d) return <p>{error || "Loading…"}</p>;
+
+  const roomMap = d.room.topicMap ?? fallbackTopicMap(d.room.concepts, d.room.edges);
+  const shownMap = mapDraft ?? roomMap;
+  const editMap = (fn: (m: TopicMap) => TopicMap) => setMapDraft((m) => (m ? fn(m) : m));
+  const mapEditor: MapEditor = {
+    selection: mapSel,
+    onSelect: setMapSel,
+    // New boxes here are lecture context only; assessed concepts are managed before publishing.
+    onAddNode: (sectionId) => {
+      const id = `n${Date.now().toString(36)}`;
+      editMap((m) => addMapNode(m, sectionId, { id, label: "New idea", details: [] }));
+      setMapSel({ kind: "node", sectionId, nodeId: id });
+      return id;
+    },
+    onRename: (nodeId, label) => editMap((m) => updateMapNode(m, nodeId, { label })),
+    onConnect: (sectionId, a, b) => editMap((m) => connectMapNodes(m, sectionId, a, b)),
+    onDeleteNode: (nodeId) => { editMap((m) => removeMapNode(m, nodeId)); setMapSel(null); },
+    onDeleteEdge: (sectionId, i) => { editMap((m) => removeMapEdge(m, sectionId, i)); setMapSel(null); },
+    onMove: (sectionId, nodeId, pos, dir) => editMap((m) => moveMapNode(m, sectionId, nodeId, pos, dir)),
+    onResetLayout: (sectionId) => editMap((m) => resetMapLayout(m, sectionId)),
+  };
+  async function saveMap() {
+    if (!mapDraft) return;
+    setMapSaving(true);
+    const ok = await post("map", { topicMap: mapDraft });
+    setMapSaving(false);
+    if (ok) { setMapDraft(null); setMapSel(null); }
+  }
 
   const live = d.room.questions.filter(isLive);
   const insight = (id: string) => d.insights.find((i) => i.conceptId === id);
@@ -174,12 +210,60 @@ function Dashboard({ code }: { code: string }) {
           </div>
 
           <Panel title="Lecture topic map" subtitle="Assessed concepts coloured from direct answers. Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet · pale with a light border: lecture context, not assessed.">
-            <TopicMapView title={d.room.title} map={d.room.topicMap ?? fallbackTopicMap(d.room.concepts, d.room.edges)}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+              {mapDraft ? (
+                <>
+                  <p className="text-sm text-stone-600"><b>Editing the map.</b> Drag boxes, double-click to rename or add, drag the green + to connect, hover for the red ✕. Questions and student results are not affected.</p>
+                  <div className="flex gap-2">
+                    <button className="btn-ghost" onClick={() => { setMapDraft(null); setMapSel(null); }} disabled={mapSaving}>Cancel</button>
+                    <button className="btn" onClick={saveMap} disabled={mapSaving}>{mapSaving ? "Saving…" : "Save map"}</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-stone-600">The AI drafted this map. You can rearrange and correct it at any time.</p>
+                  <button className="btn" onClick={() => setMapDraft(structuredClone(roomMap))}>✎ Edit map</button>
+                </>
+              )}
+            </div>
+            <TopicMapView title={d.room.title} map={shownMap} editor={mapDraft ? mapEditor : undefined}
               styleFor={(node) => {
                 const row = d.classRows.find((r) => r.conceptId === node.conceptId);
                 if (!row) return { fill: "#fafaf9", stroke: "#d6d3d1" };
                 return { fill: row.asked === 0 ? "#f5f5f4" : row.flag ? "#fca5a5" : row.missed > 0 ? "#fde68a" : "#86efac", stroke: "#78716c" };
               }} />
+            {mapDraft && <MapEditPanel map={mapDraft} selection={mapSel} onChange={setMapDraft} onClose={() => setMapSel(null)} />}
+          </Panel>
+
+          <Panel title="What students are asking" subtitle="Topics from the study helper, paraphrased and anonymous: names and exact wording are never stored. A topic appears once at least 2 different students ask about it.">
+            {d.asked.groups.length === 0 ? (
+              <p className="py-6 text-center text-sm text-stone-400">
+                {d.asked.hidden ? "A few questions so far — topics appear once at least 2 students ask about the same thing." : "Appears once students use the study helper."}
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {d.asked.groups.map((g) => {
+                  const max = d.asked.groups[0].questions;
+                  return (
+                    <div key={g.conceptId ?? "general"} className="space-y-1.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="font-medium">{g.name}</p>
+                        <p className="shrink-0 text-xs tabular-nums text-stone-500">{g.questions} question{g.questions === 1 ? "" : "s"} · {g.students} students</p>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                        <div className="h-full rounded-full bg-[#00693e]" style={{ width: `${Math.max(6, (g.questions / max) * 100)}%` }} />
+                      </div>
+                      {g.themes.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {g.themes.map((t) => <span key={t} className="chip">{t}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {d.asked.hidden > 0 && <p className="text-xs text-stone-400">{d.asked.hidden} more question{d.asked.hidden === 1 ? "" : "s"} on topics fewer than 2 students asked about are not shown.</p>}
+              </div>
+            )}
           </Panel>
 
           <div className="grid gap-6 lg:grid-cols-2">

@@ -6,7 +6,7 @@ import ProfessorGate from "@/components/ProfessorGate";
 import QuestionList from "@/components/QuestionList";
 import ShareCard from "@/components/ShareCard";
 import { questionProblems } from "@/lib/questions";
-import { addMapLink, addMapNode, connectMapNodes, fallbackTopicMap, removeMapEdge, removeMapLink, removeMapNode, sectionsByNode, updateMapEdge, updateMapNode } from "@/lib/topicMap";
+import { addMapLink, addMapNode, connectMapNodes, fallbackTopicMap, moveMapNode, removeMapEdge, resetMapLayout, removeMapLink, removeMapNode, sectionsByNode, updateMapEdge, updateMapNode } from "@/lib/topicMap";
 import type { Concept, Edge, MapNode, Question, TopicMap } from "@/lib/types";
 
 type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; sourceId?: string; topicMap?: TopicMap; note?: string };
@@ -45,6 +45,10 @@ function Workspace() {
   // Map edits. Each one reads the latest draft, so a rename committed on blur can't undo another change.
   const edit = (fn: (d: Draft) => Draft) => setDraft((d) => (d ? fn(d) : d));
   const deleteNode = (nodeId: string) => {
+    // A question left with no concept is dropped, so say so before a one-click delete removes questions.
+    const conceptId = draft && findNode(mapOf(draft), nodeId)?.conceptId;
+    const lost = conceptId ? draft!.questions.filter((q) => q.conceptIds.length === 1 && q.conceptIds[0] === conceptId).length : 0;
+    if (lost && !confirm(`Deleting this concept also removes ${lost} question${lost > 1 ? "s" : ""} that only test it. Continue?`)) return;
     edit((d) => {
       const n = findNode(mapOf(d), nodeId);
       const next = { ...d, topicMap: removeMapNode(mapOf(d), nodeId) };
@@ -91,6 +95,10 @@ function Workspace() {
         edges: linkConcepts ? [...d.edges, { source: a, target: b, weight: 0.3, type: "related" as const }] : d.edges,
       };
     }),
+    onDeleteNode: deleteNode,
+    onDeleteEdge: deleteArrow,
+    onMove: (sectionId, nodeId, pos, direction) => edit((d) => ({ ...d, topicMap: moveMapNode(mapOf(d), sectionId, nodeId, pos, direction) })),
+    onResetLayout: (sectionId) => edit((d) => ({ ...d, topicMap: resetMapLayout(mapOf(d), sectionId) })),
   };
 
   useEffect(() => {
@@ -242,7 +250,7 @@ function Workspace() {
             }}
             legend={<span>Bordered boxes are assessed concepts (dashed = not yet verified) · grey boxes are lecture context</span>} />
           <p className="text-xs text-stone-500">
-            <b>Click</b> a box or arrow to edit it in the panel · <b>double-click</b> a box to rename it · <b>double-click</b> empty space (or use + Add node) to add one · drag a box’s green <b>+</b> onto another box to draw an arrow · <b>Delete</b> removes the selection.
+            <b>Click</b> a box or arrow to edit it in the panel · <b>drag</b> a box to move it · hover a box or arrow and click its red <b>✕</b> to delete it · <b>double-click</b> a box to rename it · <b>double-click</b> empty space (or use + Add node) to add one · drag a box’s green <b>+</b> onto another box to draw an arrow · <b>Delete</b> removes the selection.
           </p>
         </div>
 

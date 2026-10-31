@@ -26,8 +26,9 @@ function wrap(text: string, max: number): string[] {
 // A chip under a node points at another section: the same idea there, or a link into it.
 type Chip = { sectionId: string; nodeId: string; tip: string };
 type Box = { node: MapNode; label: string[]; details: string[]; chips: Chip[]; w: number; h: number; x: number; y: number };
-type Line = { style: "solid" | "dotted"; label?: string; d: string; lx: number; ly: number; lw: number };
-type Laid = { boxes: Box[]; lines: Line[]; width: number; height: number };
+// mx/my: a point on the middle of the arrow (where its delete button sits).
+type Line = { source: string; target: string; style: "solid" | "dotted"; label?: string; d: string; lx: number; ly: number; lw: number; mx: number; my: number };
+type Laid = { boxes: Box[]; lines: Line[]; width: number; height: number; direction: "TD" | "LR" };
 
 function measure(node: MapNode, maxDetail: number, chips: Chip[]): Box {
   const label = wrap(node.label, MAX_LABEL), details = node.details.flatMap((d) => wrap(d, maxDetail));
@@ -63,19 +64,58 @@ function layoutSection(s: MapSection, chipsFor: (nodeId: string) => Chip[], dire
     let d = `M${p[0].x},${p[0].y}`;
     for (let i = 1; i < p.length - 1; i++) d += ` Q${p[i].x},${p[i].y} ${(p[i].x + p[i + 1].x) / 2},${(p[i].y + p[i + 1].y) / 2}`;
     d += ` L${p[p.length - 1].x},${p[p.length - 1].y}`;
-    return { style: e.style, label: e.label, d, lx: ge.x ?? 0, ly: ge.y ?? 0, lw: e.label ? e.label.length * 6 + 12 : 0 };
+    const mid = p[Math.floor(p.length / 2)];
+    return { source: e.source, target: e.target, style: e.style, label: e.label, d, lx: ge.x ?? mid.x, ly: ge.y ?? mid.y, lw: e.label ? e.label.length * 6 + 12 : 0, mx: mid.x, my: mid.y };
   });
   const { width = 0, height = 0 } = g.graph();
-  return { boxes, lines, width, height };
+  return { boxes, lines, width, height, direction: direction === "LR" ? "LR" : "TD" };
+}
+
+// A curve between two boxes, leaving and entering on the sides that face each other.
+function routeBetween(a: Box, b: Box) {
+  const dx = b.x - a.x, dy = b.y - a.y, horizontal = Math.abs(dx) * 0.7 > Math.abs(dy);
+  const s = Math.sign(horizontal ? dx : dy) || 1;
+  const p0 = horizontal ? { x: a.x + (s * a.w) / 2, y: a.y } : { x: a.x, y: a.y + (s * a.h) / 2 };
+  const p3 = horizontal ? { x: b.x - (s * b.w) / 2, y: b.y } : { x: b.x, y: b.y - (s * b.h) / 2 };
+  const pull = Math.max(24, (horizontal ? Math.abs(p3.x - p0.x) : Math.abs(p3.y - p0.y)) * 0.45);
+  const p1 = horizontal ? { x: p0.x + s * pull, y: p0.y } : { x: p0.x, y: p0.y + s * pull };
+  const p2 = horizontal ? { x: p3.x - s * pull, y: p3.y } : { x: p3.x, y: p3.y - s * pull };
+  return {
+    d: `M${p0.x},${p0.y} C${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`,
+    mx: (p0.x + 3 * p1.x + 3 * p2.x + p3.x) / 8, my: (p0.y + 3 * p1.y + 3 * p2.y + p3.y) / 8,
+  };
+}
+
+// Put dragged boxes where the professor left them and redraw the arrows that touch them.
+function applyPositions(laid: Laid, positions: Record<string, { x: number; y: number }>): Laid {
+  const moved = new Set(Object.keys(positions).filter((id) => laid.boxes.some((b) => b.node.id === id)));
+  if (!moved.size) return laid;
+  // Hand-placed boxes are drawn after the others, so they sit on top of anything they overlap.
+  const boxes = [
+    ...laid.boxes.filter((b) => !moved.has(b.node.id)),
+    ...laid.boxes.filter((b) => moved.has(b.node.id)).map((b) => ({ ...b, ...positions[b.node.id] })),
+  ];
+  const byId = new Map(boxes.map((b) => [b.node.id, b]));
+  const lines = laid.lines.map((l) => {
+    if (!moved.has(l.source) && !moved.has(l.target)) return l;
+    const r = routeBetween(byId.get(l.source)!, byId.get(l.target)!);
+    return { ...l, d: r.d, lx: r.mx, ly: r.my, mx: r.mx, my: r.my };
+  });
+  const width = Math.max(laid.width, ...boxes.map((b) => b.x + b.w / 2 + 16));
+  const height = Math.max(laid.height, ...boxes.map((b) => b.y + b.h / 2 + (b.chips.length ? CHIP_H + 8 : 0) + 16));
+  return { ...laid, boxes, lines, width, height };
 }
 
 // A top-down tree widens with every sibling; when it would not fit, draw it left-to-right so
 // siblings stack vertically like an outline.
 function layoutFitted(s: MapSection, chipsFor: (nodeId: string) => Chip[]): Laid {
-  const laid = layoutSection(s, chipsFor);
-  if (s.direction !== "TD" || laid.width <= FIT_WIDTH) return laid;
-  const sideways = layoutSection(s, chipsFor, "LR");
-  return sideways.width < laid.width ? sideways : laid;
+  let laid = layoutSection(s, chipsFor);
+  if (s.direction === "TD" && laid.width > FIT_WIDTH) {
+    const sideways = layoutSection(s, chipsFor, "LR");
+    if (sideways.width < laid.width) laid = sideways;
+  }
+  // The professor's arrangement only applies to the direction it was made in.
+  return s.layout?.direction === laid.direction ? applyPositions(laid, s.layout.positions) : laid;
 }
 
 type GraphProps = {
@@ -96,6 +136,9 @@ type GraphProps = {
   onNodeDoubleClick?: (n: MapNode) => void;
   hideLabel?: (n: MapNode) => boolean;
   nodeExtra?: (b: Box) => React.ReactNode;
+  edgeExtra?: (l: Line, index: number) => React.ReactNode;
+  onEdgeHover?: (index: number | null) => void;
+  onNodePointerDown?: (e: React.PointerEvent, b: Box) => void;
 };
 
 // What the professor has selected on the map: a box, or an arrow inside one graph.
@@ -106,6 +149,10 @@ export type MapEditor = {
   onAddNode: (sectionId: string) => string; // returns the new node's id so it can be renamed straight away
   onRename: (nodeId: string, label: string) => void;
   onConnect: (sectionId: string, source: string, target: string) => void;
+  onDeleteNode: (nodeId: string) => void;
+  onDeleteEdge: (sectionId: string, index: number) => void;
+  onMove: (sectionId: string, nodeId: string, pos: { x: number; y: number }, direction: "TD" | "LR") => void;
+  onResetLayout: (sectionId: string) => void;
 };
 
 // Shrink wide graphs to the card, but never below ~55% (text stays legible); past that, scroll.
@@ -120,7 +167,7 @@ function GraphSvg(props: GraphProps) {
   );
 }
 
-function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNodeClick, onHover, onChip, chipLabel, allClickable, selectedEdge, onEdgeClick, onNodeDoubleClick, hideLabel, nodeExtra }: GraphProps) {
+function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNodeClick, onHover, onChip, chipLabel, allClickable, selectedEdge, onEdgeClick, onNodeDoubleClick, hideLabel, nodeExtra, edgeExtra, onEdgeHover, onNodePointerDown }: GraphProps) {
   const marker = useId().replace(/:/g, "");
   return (
     <>
@@ -133,7 +180,8 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         </marker>
       </defs>
       {laid.lines.map((l, i) => (
-        <g key={i} className={onEdgeClick ? "cursor-pointer" : undefined} onClick={onEdgeClick && ((e) => { e.stopPropagation(); onEdgeClick(i); })}>
+        <g key={i} className={onEdgeClick ? "cursor-pointer" : undefined} onClick={onEdgeClick && ((e) => { e.stopPropagation(); onEdgeClick(i); })}
+          onPointerEnter={onEdgeHover && (() => onEdgeHover(i))} onPointerLeave={onEdgeHover && (() => onEdgeHover(null))}>
           {onEdgeClick && <path d={l.d} fill="none" stroke="transparent" strokeWidth={16} />}
           <path d={l.d} fill="none" stroke={selectedEdge === i ? CROSS : "#57534e"} strokeWidth={selectedEdge === i ? 3 : 1.4}
             strokeDasharray={l.style === "dotted" ? "4 4" : undefined} markerEnd={arrows ? `url(#${marker}${selectedEdge === i ? "s" : ""})` : undefined} />
@@ -143,6 +191,7 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
               <text textAnchor="middle" dy={4} fontSize={11} fontStyle="italic" fill="#57534e">{l.label}</text>
             </g>
           )}
+          {edgeExtra?.(l, i)}
         </g>
       ))}
       {laid.boxes.map((b) => {
@@ -154,7 +203,8 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         const hidden = hideLabel?.(b.node);
         return (
           <g key={b.node.id} onPointerEnter={onHover && (() => onHover(b.node))} onPointerLeave={onHover && (() => onHover(null))}>
-            <g className={clickable ? "cursor-pointer" : undefined} onClick={clickable ? (e) => { e.stopPropagation(); onNodeClick!(b.node); } : undefined}
+            <g className={onNodePointerDown ? "cursor-grab" : clickable ? "cursor-pointer" : undefined} onClick={clickable ? (e) => { e.stopPropagation(); onNodeClick!(b.node); } : undefined}
+              onPointerDown={onNodePointerDown && ((e) => onNodePointerDown(e, b))}
               onDoubleClick={onNodeDoubleClick && ((e) => { e.stopPropagation(); onNodeDoubleClick(b.node); })} opacity={hidden ? 0.35 : 1}>
               <rect x={b.x - b.w / 2} y={top} width={b.w} height={b.h} rx={8}
                 fill={st.fill ?? "#ffffff"} stroke={lit ? "#d97706" : selected ? CROSS : st.stroke ?? "#a8a29e"}
@@ -185,29 +235,49 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
   );
 }
 
-// One graph with editing: click to select, double-click a box to rename it, double-click empty space
-// to add a box, drag a box's + handle onto another box to draw an arrow.
+// One graph with editing: click to select, drag a box to move it, double-click a box to rename it,
+// double-click empty space to add a box, drag a box's + handle onto another box to draw an arrow,
+// and the red ✕ on a hovered box or arrow deletes it.
 function EditableGraph({ sectionId, editor, ...props }: GraphProps & { sectionId: string; editor: MapEditor }) {
   const { laid } = props;
   const svg = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [hoverEdge, setHoverEdge] = useState<number | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [link, setLink] = useState<{ from: string; x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number; x: number; y: number; moved: boolean } | null>(null);
   const sel = editor.selection;
+  const busy = !!link || !!drag?.moved;
+  // While dragging, draw the box at the pointer and re-route its arrows; it is saved on release.
+  const placed = drag?.moved ? applyPositions(laid, { [drag.id]: { x: drag.x, y: drag.y } }) : laid;
+  // Draw the box being dragged (or the selected one) last, so it sits on top of anything it overlaps.
+  const front = drag?.id ?? (sel?.kind === "node" ? sel.nodeId : null);
+  const shown = front ? { ...placed, boxes: [...placed.boxes.filter((b) => b.node.id !== front), ...placed.boxes.filter((b) => b.node.id === front)] } : placed;
 
   const toSvg = (e: React.PointerEvent | React.MouseEvent) => {
     const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse());
     return { x: p.x, y: p.y };
   };
-  const boxAt = (p: { x: number; y: number }) => laid.boxes.find((b) => Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2);
+  const boxAt = (p: { x: number; y: number }) => shown.boxes.find((b) => Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2);
   const commit = (save: boolean) => {
     if (save && renaming?.value.trim()) editor.onRename(renaming.id, renaming.value.trim());
     setRenaming(null);
   };
+  const endDrag = () => {
+    if (drag?.moved) editor.onMove(sectionId, drag.id, { x: drag.x, y: drag.y }, laid.direction);
+    setDrag(null);
+  };
+  const deleteButton = (x: number, y: number, title: string, onClick: () => void) => (
+    <g className="cursor-pointer" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      <title>{title}</title>
+      <circle cx={x} cy={y} r={9} fill="#dc2626" stroke="#fff" strokeWidth={2} />
+      <text x={x} y={y + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#fff" pointerEvents="none">✕</text>
+    </g>
+  );
 
   return (
     <div className="overflow-x-auto">
-      <svg ref={svg} viewBox={`0 0 ${laid.width} ${laid.height}`} className="mx-auto block h-auto w-full select-none"
+      <svg ref={svg} viewBox={`0 0 ${laid.width} ${laid.height}`} className="mx-auto block h-auto w-full touch-none select-none"
         style={{ maxWidth: laid.width, minWidth: laid.width * 0.55 }} role="img" aria-label={props.title}
         onPointerDown={(e) => { if (e.target === svg.current) editor.onSelect(null); }}
         onDoubleClick={(e) => {
@@ -215,22 +285,47 @@ function EditableGraph({ sectionId, editor, ...props }: GraphProps & { sectionId
           const id = editor.onAddNode(sectionId);
           setRenaming({ id, value: "New concept" });
         }}
-        onPointerMove={(e) => link && setLink({ ...link, ...toSvg(e) })}
+        onPointerMove={(e) => {
+          const p = toSvg(e);
+          if (link) setLink({ ...link, ...p });
+          if (drag) {
+            const b = laid.boxes.find((x) => x.node.id === drag.id)!;
+            // Keep the box inside the graph's frame.
+            const x = Math.min(laid.width - b.w / 2 - 4, Math.max(b.w / 2 + 4, p.x - drag.dx));
+            const y = Math.min(laid.height - b.h / 2 - 4, Math.max(b.h / 2 + 4, p.y - drag.dy));
+            setDrag({ ...drag, x, y, moved: drag.moved || Math.hypot(x - b.x, y - b.y) > 4 });
+          }
+        }}
         onPointerUp={(e) => {
+          endDrag();
           if (!link) return;
           const to = boxAt(toSvg(e));
           if (to && to.node.id !== link.from) editor.onConnect(sectionId, link.from, to.node.id);
           setLink(null);
-        }}>
-        <GraphContent {...props} allClickable
+        }}
+        onPointerLeave={endDrag}>
+        <GraphContent {...props} laid={shown} allClickable
           isSelected={(n) => sel?.kind === "node" && sel.nodeId === n.id}
           isLit={(n) => (!!link && hover === n.id && n.id !== link.from) || (props.isLit?.(n) ?? false)}
           selectedEdge={sel?.kind === "edge" && sel.sectionId === sectionId ? sel.index : null}
           onEdgeClick={(index) => editor.onSelect({ kind: "edge", sectionId, index })}
+          onEdgeHover={setHoverEdge}
           onNodeClick={(n) => editor.onSelect({ kind: "node", sectionId, nodeId: n.id })}
           onNodeDoubleClick={(n) => setRenaming({ id: n.id, value: n.label })}
+          onNodePointerDown={(e, b) => {
+            if (e.button !== 0 || renaming?.id === b.node.id) return;
+            e.stopPropagation();
+            const p = toSvg(e);
+            setDrag({ id: b.node.id, dx: p.x - b.x, dy: p.y - b.y, x: b.x, y: b.y, moved: false });
+          }}
           onHover={(n) => setHover(n?.id ?? null)}
           hideLabel={(n) => renaming?.id === n.id}
+          edgeExtra={(l, i) => {
+            const selected = sel?.kind === "edge" && sel.sectionId === sectionId && sel.index === i;
+            if (busy || (hoverEdge !== i && !selected)) return null;
+            const [x, y] = l.label ? [l.lx + l.lw / 2 + 12, l.ly] : [l.mx, l.my];
+            return deleteButton(x, y, "Delete this arrow", () => { setHoverEdge(null); editor.onDeleteEdge(sectionId, i); });
+          }}
           nodeExtra={(b) => {
             const top = b.y - b.h / 2;
             if (renaming?.id === b.node.id) {
@@ -243,23 +338,26 @@ function EditableGraph({ sectionId, editor, ...props }: GraphProps & { sectionId
                 </foreignObject>
               );
             }
-            const show = !link && (hover === b.node.id || (sel?.kind === "node" && sel.nodeId === b.node.id));
+            const show = !busy && (hover === b.node.id || (sel?.kind === "node" && sel.nodeId === b.node.id));
             if (!show) return null;
             return (
-              <g className="cursor-crosshair" onPointerDown={(e) => {
-                e.stopPropagation();
-                svg.current?.setPointerCapture(e.pointerId);
-                setLink({ from: b.node.id, ...toSvg(e) });
-              }}>
-                <title>Drag onto another box to draw an arrow</title>
-                <circle cx={b.x + b.w / 2} cy={b.y} r={10} fill={CROSS} stroke="#fff" strokeWidth={2} />
-                <text x={b.x + b.w / 2} y={b.y + 4.5} textAnchor="middle" fontSize={14} fontWeight={700} fill="#fff" pointerEvents="none">+</text>
-              </g>
+              <>
+                {deleteButton(b.x + b.w / 2 - 2, top + 2, b.node.conceptId ? "Delete this box and its concept" : "Delete this box", () => { setHover(null); editor.onDeleteNode(b.node.id); })}
+                <g className="cursor-crosshair" onPointerDown={(e) => {
+                  e.stopPropagation();
+                  svg.current?.setPointerCapture(e.pointerId);
+                  setLink({ from: b.node.id, ...toSvg(e) });
+                }}>
+                  <title>Drag onto another box to draw an arrow</title>
+                  <circle cx={b.x + b.w / 2} cy={b.y} r={10} fill={CROSS} stroke="#fff" strokeWidth={2} />
+                  <text x={b.x + b.w / 2} y={b.y + 4.5} textAnchor="middle" fontSize={14} fontWeight={700} fill="#fff" pointerEvents="none">+</text>
+                </g>
+              </>
             );
           }}
         />
         {link && (() => {
-          const from = laid.boxes.find((b) => b.node.id === link.from);
+          const from = shown.boxes.find((b) => b.node.id === link.from);
           return from && <line x1={from.x + from.w / 2} y1={from.y} x2={link.x} y2={link.y} stroke={CROSS} strokeWidth={2.5} strokeDasharray="6 4" pointerEvents="none" />;
         })()}
       </svg>
@@ -529,7 +627,14 @@ export default function TopicMapView({ title, map, styleFor, selectedConceptId, 
         <section key={s.id} id={`${anchor}-${s.id}`} className="card scroll-mt-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-bold">{i + 1}. {s.title}</h3>
-            {editor && <button className="btn-ghost" onClick={() => editor.onSelect({ kind: "node", sectionId: s.id, nodeId: editor.onAddNode(s.id) })}>+ Add node</button>}
+            {editor && (
+              <div className="flex gap-2">
+                {s.layout && Object.keys(s.layout.positions).length > 0 && (
+                  <button className="btn-ghost" title="Put every box back where the automatic layout places it" onClick={() => editor.onResetLayout(s.id)}>Reset layout</button>
+                )}
+                <button className="btn-ghost" onClick={() => editor.onSelect({ kind: "node", sectionId: s.id, nodeId: editor.onAddNode(s.id) })}>+ Add node</button>
+              </div>
+            )}
           </div>
           {editor ? (
             <EditableGraph sectionId={s.id} editor={editor} laid={sectionLayouts[i]} title={s.title} styleFor={styleFor}

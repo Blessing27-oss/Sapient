@@ -23,7 +23,7 @@ const toEdge = (e: RawEdge): MapEdge => {
 };
 
 // Drop anything that would render as a dangling or ambiguous element rather than trusting the model.
-export function sanitizeTopicMap(raw: RawTopicMap | undefined, conceptIds: Set<string>): TopicMap | undefined {
+export function sanitizeTopicMap(raw: RawTopicMap | undefined, conceptIds: Set<string>, minNodes = 2): TopicMap | undefined {
   if (!raw?.sections?.length) return undefined;
   const sections: MapSection[] = raw.sections.flatMap((s, i) => {
     const seen = new Set<string>();
@@ -40,7 +40,7 @@ export function sanitizeTopicMap(raw: RawTopicMap | undefined, conceptIds: Set<s
       if (!seen.has(e.source) || !seen.has(e.target) || e.source === e.target || pairs.has(key)) return false;
       return pairs.add(key), true;
     });
-    if (nodes.length < 2) return [];
+    if (nodes.length < minNodes) return [];
     return [{ id: "", title: clean(s.title) || `Graph ${i + 1}`, direction: s.direction === "LR" ? ("LR" as const) : ("TD" as const), nodes, edges, sources: clean(s.sources), note: clean(s.note) }];
   }).map((s, i) => ({ ...s, id: `s${i + 1}` }));
   if (!sections.length) return undefined;
@@ -159,4 +159,45 @@ export function addMapLink(map: TopicMap, source: string, target: string, style:
 
 export function removeMapLink(map: TopicMap, index: number): TopicMap {
   return { ...map, links: map.links.filter((_, i) => i !== index) };
+}
+
+// A dragged box keeps its place. Positions only make sense for the direction they were drawn in,
+// so moving a box in a graph now drawn the other way starts a fresh set.
+export function moveMapNode(map: TopicMap, sectionId: string, nodeId: string, pos: { x: number; y: number }, direction: "TD" | "LR"): TopicMap {
+  return mapSections(map, sectionId, (s) => {
+    const positions = s.layout?.direction === direction ? s.layout.positions : {};
+    return { ...s, layout: { direction, positions: { ...positions, [nodeId]: { x: Math.round(pos.x), y: Math.round(pos.y) } } } };
+  });
+}
+
+export function resetMapLayout(map: TopicMap, sectionId: string): TopicMap {
+  return mapSections(map, sectionId, ({ layout: _drop, ...s }) => s); // eslint-disable-line @typescript-eslint/no-unused-vars
+}
+
+// A map the professor saved from the editor: same checks as AI output, except a graph may shrink to a
+// single box, and hand-placed positions are kept when they are finite numbers for boxes still present.
+export function cleanSavedTopicMap(input: unknown, conceptIds: Set<string>): TopicMap | undefined {
+  const m = input as TopicMap | undefined;
+  if (!m || !Array.isArray(m.sections)) return undefined;
+  const sections = m.sections.filter((s) => Array.isArray(s?.nodes) && s.nodes.length > 0);
+  const edge = (e: MapEdge) => ({ source: e?.source, target: e?.target, style: e?.style, label: e?.label ?? "" });
+  const cleaned = sanitizeTopicMap({
+    sourceNote: m.sourceNote, studyRoute: m.studyRoute, links: (m.links ?? []).map(edge),
+    sections: sections.map((s) => ({
+      title: s.title, direction: s.direction, sources: s.sources, note: s.note,
+      nodes: s.nodes.map((n) => ({ id: n?.id, label: n?.label, details: Array.isArray(n?.details) ? n.details : [], conceptId: n?.conceptId ?? "" })),
+      edges: (s.edges ?? []).map(edge),
+    })),
+  } as RawTopicMap, conceptIds, 1);
+  if (!cleaned || cleaned.sections.length !== sections.length) return cleaned;
+  cleaned.sections.forEach((s, i) => {
+    const layout = sections[i].layout;
+    if (!layout || (layout.direction !== "TD" && layout.direction !== "LR") || typeof layout.positions !== "object") return;
+    const ids = new Set(s.nodes.map((n) => n.id));
+    const positions = Object.fromEntries(Object.entries(layout.positions)
+      .filter(([id, p]) => ids.has(id) && Number.isFinite(p?.x) && Number.isFinite(p?.y))
+      .map(([id, p]) => [id, { x: p.x, y: p.y }]));
+    if (Object.keys(positions).length) s.layout = { direction: layout.direction, positions };
+  });
+  return cleaned;
 }
