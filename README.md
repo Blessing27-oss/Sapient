@@ -1,4 +1,4 @@
-# KnowGap
+# Sapient
 
 Find what students don't know, before the exam. A professor-controlled adaptive diagnostic.
 

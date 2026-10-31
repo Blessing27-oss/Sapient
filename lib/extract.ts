@@ -1,8 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { SAMPLE } from "./sample.ts";
 import type { Concept, Edge, Question } from "./types.ts";
 
-export type Extracted = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; source: "llm" | "sample"; note?: string };
+export type Extracted = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; source: "llm" };
 
 const SCHEMA = {
   type: "object",
@@ -20,10 +19,9 @@ const SCHEMA = {
 } as const;
 
 export async function extract(text: string): Promise<Extracted> {
-  if (!process.env.ANTHROPIC_API_KEY || text.trim().length < 200) {
-    return { ...SAMPLE, source: "sample", note: process.env.ANTHROPIC_API_KEY ? "PDF had too little text; loaded the sample lesson." : "No ANTHROPIC_API_KEY set; loaded the sample lesson." };
-  }
-  try {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set on the server, so the PDF can't be analysed.");
+  if (text.trim().length < 200) throw new Error("This PDF has almost no readable text (is it a scan or images only?).");
+
     const client = new Anthropic();
     const res = await client.messages.create({
       model: "claude-sonnet-5-5",
@@ -46,7 +44,4 @@ export async function extract(text: string): Promise<Extracted> {
         .filter((q) => q.conceptIds.length && q.correctAnswer >= 0 && q.correctAnswer < q.options.length),
       source: "llm",
     };
-  } catch (err) {
-    return { ...SAMPLE, source: "sample", note: `AI extraction failed (${(err as Error).message}); loaded the sample lesson.` };
-  }
 }

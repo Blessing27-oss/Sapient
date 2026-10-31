@@ -39,7 +39,9 @@ function Workspace() {
     const r = await fetch("/api/generate", { method: "POST", body: fd });
     if (r.status === 401) { location.reload(); return; }
     const d = await r.json();
-    setDraft(d); setSel(d.concepts[0]?.id ?? null); setBusy(false);
+    setBusy(false);
+    if (!r.ok) return setErr(d.error ?? "Something went wrong reading that PDF.");
+    setDraft(d); setSel(d.concepts[0]?.id ?? null);
   }
 
   if (code && draft)
@@ -66,7 +68,7 @@ function Workspace() {
           <span className="text-sm text-stone-500">Lecture notes or slides</span>
           <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
         </label>
-        <button className="text-sm text-stone-500 underline hover:text-[#00693e]" disabled={busy} onClick={() => generate(null)}>No PDF handy? Try the sample Fourier lesson</button>
+        {err && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
       </div>
     );
 

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-type Me = { professor: boolean; email: string; googleClientId: string; dev: boolean };
+type Me = { professor: boolean; googleClientId: string; dev: boolean };
 declare global { interface Window { google?: { accounts: { id: { initialize: (o: object) => void; renderButton: (el: HTMLElement, o: object) => void } } } } }
 
 export default function ProfessorGate({ children }: { children: React.ReactNode }) {
@@ -43,15 +43,11 @@ export default function ProfessorGate({ children }: { children: React.ReactNode 
     <div className="mx-auto mt-10 max-w-md rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-sm">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#00693e] text-xl text-white">🔒</div>
       <h1 className="text-xl font-semibold">Professor sign-in</h1>
-      <p className="mt-1 text-sm text-stone-500">Restricted to <b>{me.email}</b></p>
       <div className="mt-6 flex flex-col items-center gap-3">
         {me.googleClientId && <div ref={btn} />}
         {me.dev && (
           <>
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Dev mode: no GOOGLE_CLIENT_ID is configured, so sign-in only checks the email you type. Not secure — set GOOGLE_CLIENT_ID before sharing publicly.
-            </p>
-            <input className="input" placeholder="Dartmouth email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && devLogin()} />
+            <input className="input" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && devLogin()} />
             <button className="btn w-full" onClick={devLogin}>Continue</button>
           </>
         )}
