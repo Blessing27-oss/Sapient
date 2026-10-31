@@ -1,11 +1,16 @@
 import { QUESTION_BUDGET, gradeResponse, classify, computeState, selectNextQuestion, validResponses } from "@/lib/engine";
+import { requireStudent } from "@/lib/auth";
+import { isLive } from "@/lib/questions";
 import { getRoom } from "@/lib/store";
 
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const auth = await requireStudent();
+  if ("deny" in auth) return auth.deny;
   const { code } = await params;
   const room = await getRoom(code);
-  const student = room?.students.find((s) => s.id === new URL(req.url).searchParams.get("student"));
+  const student = room?.students.find((s) => s.id === new URL(req.url).searchParams.get("student") && s.userId === auth.user.id);
   if (!room || !student) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!room.questions.some(isLive)) return Response.json({ noQuestions: true, title: room.title });
   const valid = validResponses(room, student);
   const state = computeState(room, valid);
   const done = valid.length >= QUESTION_BUDGET;

@@ -2,21 +2,26 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Graph from "@/components/Graph";
 import ProfessorGate from "@/components/ProfessorGate";
+import QuestionList from "@/components/QuestionList";
 import ShareCard from "@/components/ShareCard";
-import { LABEL_TEXT } from "@/lib/engine";
+import { isLive } from "@/lib/questions";
 import type { Concept, Insight, Label, Question } from "@/lib/types";
 
 type Dash = {
   room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
+  answeredQuestionIds: string[];
   students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
   challengeGroups: { question: Question; reasons: { student: string; reason: string }[] }[];
   insights: Insight[];
 };
-const DOT: Record<Label, string> = {
-  strength: "bg-green-500", review: "bg-red-500", mixed: "bg-amber-500",
-  "tentative-up": "bg-sky-200", "tentative-down": "bg-orange-200", unknown: "bg-slate-200",
-};
+const GROUPS: { label: Label; title: string; chip: string }[] = [
+  { label: "strength", title: "Showed they know", chip: "bg-green-100 text-green-800" },
+  { label: "review", title: "Needs review", chip: "bg-red-100 text-red-800" },
+  { label: "mixed", title: "Mixed answers", chip: "bg-amber-100 text-amber-800" },
+  { label: "tentative-up", title: "Probably fine (inferred)", chip: "bg-sky-50 text-sky-700 ring-1 ring-sky-200" },
+  { label: "tentative-down", title: "Might struggle (inferred)", chip: "bg-orange-50 text-orange-700 ring-1 ring-orange-200" },
+];
 
 export default function Page({ params }: { params: Promise<{ code: string }> }) {
   return <ProfessorGate><Dashboard code={use(params).code} /></ProfessorGate>;
@@ -25,6 +30,11 @@ export default function Page({ params }: { params: Promise<{ code: string }> }) 
 function Dashboard({ code }: { code: string }) {
   const [d, setD] = useState<Dash | null>(null);
   const [editing, setEditing] = useState<Question | null>(null);
+  // Local copy of the room's unanswered questions for editing; the 3s refresh must not overwrite unsaved edits.
+  const [qDraft, setQDraft] = useState<Question[]>([]);
+  const [qDirty, setQDirty] = useState(false);
+  const [qSaved, setQSaved] = useState(false);
+  useEffect(() => { if (d && !qDirty) setQDraft(d.room.questions.filter((q) => !d.answeredQuestionIds.includes(q.id))); }, [d, qDirty]);
 
   const [error, setError] = useState("");
   const [revisionMode, setRevisionMode] = useState<"regrade" | "reset">("regrade");
@@ -61,13 +71,32 @@ function Dashboard({ code }: { code: string }) {
       </div>
       <ShareCard code={d.room.code} />
 
+      {d.room.questions.filter(isLive).length === 0 && (
+        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <b>No questions are live.</b> Students who join will see nothing to answer. Approve or add questions in the Questions section below.
+        </div>
+      )}
+
       <section className="space-y-2">
         <h2 className="text-xl font-bold">Class concept map</h2>
         <Graph
-          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac" }))}
+          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
           edges={d.room.edges}
         />
         <p className="text-xs text-stone-500">Red: at least half of students who directly answered missed it · Amber: some missed · Green: none missed · Grey: no direct answers yet.</p>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-bold">Questions <span className="text-base font-normal text-stone-500">· {d.room.questions.filter(isLive).length} live</span></h2>
+          {qDirty && <button className="btn" onClick={async () => {
+            const r = await fetch(`/api/rooms/${code}/questions`, { method: "POST", body: JSON.stringify({ questions: qDraft }) });
+            if (r.ok) { setQDirty(false); setQSaved(true); setTimeout(() => setQSaved(false), 2000); load(); } else setError("Could not save the questions.");
+          }}>Save question changes</button>}
+          {!qDirty && qSaved && <span className="text-sm font-semibold text-green-700">Saved ✓</span>}
+        </div>
+        {d.answeredQuestionIds.length > 0 && <p className="text-xs text-stone-500">{d.answeredQuestionIds.length} question{d.answeredQuestionIds.length === 1 ? " has" : "s have"} already been answered and can’t be edited here. Use the challenge tools for those.</p>}
+        <QuestionList questions={qDraft} concepts={d.room.concepts} onChange={(q) => { setQDraft(q); setQDirty(true); }} />
       </section>
 
       {d.challengeGroups.length > 0 && (
@@ -146,30 +175,59 @@ function Dashboard({ code }: { code: string }) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xl font-bold">Students</h2>
-        <div className="flex flex-wrap gap-3 text-xs">
-          {(Object.keys(DOT) as Label[]).map((l) => <span key={l} className="flex items-center gap-1"><i className={`inline-block h-3 w-3 rounded-full ${DOT[l]}`} />{LABEL_TEXT[l]}</span>)}
+        <div className="flex items-end justify-between">
+          <h2 className="text-xl font-bold">Students</h2>
+          <p className="text-xs text-stone-500">Based only on the questions each student was asked. “Inferred” is a hint from related answers, not something they answered.</p>
         </div>
-        <p className="text-xs text-stone-500">Cells show correct / direct answers. Dashed ~ cells are inferred only; — means unknown. Crossed-out path entries are invalidated and excluded from the question budget.</p>
-        <div className="overflow-x-auto">
-          {d.students.length === 0 && (
-            <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-stone-500">
-              <p className="font-semibold text-stone-700">Waiting for students to join</p>
-              <p className="text-sm">Share the code above. Results appear here live as students answer.</p>
-            </div>
-          )}
-          <table className={`w-full text-left text-sm ${d.students.length === 0 ? "hidden" : ""}`}>
-            <thead><tr><th className="p-1">Student</th><th className="p-1">Path</th>{d.room.concepts.map((c) => <th key={c.id} className="p-1 text-xs font-normal [writing-mode:vertical-rl]">{c.name}</th>)}</tr></thead>
-            <tbody>
-              {d.students.map((s) => (
-                <tr key={s.id} className="border-t">
-                  <td className="p-1 whitespace-nowrap">{s.name}<span className="ml-1 text-xs text-stone-400">{s.done ? "(complete)" : `(${s.answered}/3)`}</span></td>
-                  <td className="p-1 text-xs">{s.path.map((p) => <span key={p.questionId} title={`${qText(p.questionId)}${p.invalidated ? " (invalidated, excluded)" : p.revised ? " (revised)" : ""}`} className={`mr-1 inline-block rounded px-1.5 py-0.5 ${p.invalidated ? "bg-stone-100 text-stone-400 line-through" : p.correct ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>Q{d.room.questions.findIndex((q) => q.id === p.questionId) + 1}{p.invalidated ? "" : p.correct ? " ✓" : " ✗"} </span>)}</td>
-                  {s.concepts.map((c) => <td key={c.conceptId} className="p-1"><div title={`${LABEL_TEXT[c.label]} · direct ${c.correctCount}/${c.directCount} · inferred ${c.inferred.toFixed(2)}`} className={`min-w-12 rounded border px-1 py-2 text-center text-xs ${DOT[c.label]} ${c.directCount === 0 && c.label !== "unknown" ? "border-dashed border-stone-500" : "border-transparent"}`}>{c.directCount > 0 ? `${c.correctCount}/${c.directCount}` : c.label === "unknown" ? "—" : "~"}</div></td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {d.students.length === 0 && (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-stone-500">
+            <p className="font-semibold text-stone-700">Waiting for students to join</p>
+            <p className="text-sm">Share the code above. Results appear here live as students answer.</p>
+          </div>
+        )}
+        <div className="grid gap-4 md:grid-cols-2">
+          {d.students.map((s) => {
+            const name = (id: string) => d.room.concepts.find((c) => c.id === id)?.name ?? id;
+            const unknown = s.concepts.filter((c) => c.label === "unknown").length;
+            return (
+              <div key={s.id} className="card space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 font-bold text-stone-600">{s.name.charAt(0).toUpperCase()}</span>
+                    <p className="font-semibold">{s.name}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${s.done ? "bg-green-100 text-green-800" : "bg-stone-100 text-stone-600"}`}>{s.done ? "Finished" : `${s.answered} of 3 answered`}</span>
+                </div>
+
+                {s.path.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.path.map((p, i) => (
+                      <span key={p.questionId} title={`${qText(p.questionId)}${p.invalidated ? " (withdrawn, not counted)" : p.revised ? " (revised)" : ""}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${p.invalidated ? "bg-stone-100 text-stone-400 line-through" : p.correct ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                        Answer {i + 1} {p.invalidated ? "" : p.correct ? "✓" : "✗"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {GROUPS.map((g) => {
+                  const items = s.concepts.filter((c) => c.label === g.label);
+                  if (!items.length) return null;
+                  return (
+                    <div key={g.label}>
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">{g.title}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {items.map((c) => (
+                          <span key={c.conceptId} title={c.directCount > 0 ? `${c.correctCount} of ${c.directCount} answered correctly` : `Inferred only (${c.inferred.toFixed(2)})`} className={`rounded-full px-2.5 py-1 text-xs font-medium ${g.chip}`}>{name(c.conceptId)}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {unknown > 0 && <p className="text-xs text-stone-400">{unknown} concept{unknown === 1 ? "" : "s"} not assessed yet</p>}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

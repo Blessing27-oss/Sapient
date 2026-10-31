@@ -2,21 +2,24 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Graph from "@/components/Graph";
+import { StudentGate } from "@/components/ProfessorGate";
 import { LABEL_TEXT } from "@/lib/engine";
-import { LABEL_FILL, LABEL_RING } from "@/lib/ui";
+import { LABEL_ACCENT, LABEL_FILL } from "@/lib/ui";
 import type { Label } from "@/lib/types";
 
 type Q = { id: string; text: string; options: string[] };
 type Progress = { answered: number; total: number };
 type Next =
   | { question: Q; progress: Progress }
+  | { noQuestions: true; title: string }
   | { done: true; progress: Progress; edges: { source: string; target: string; weight: number }[]; diagnostic: { conceptId: string; name: string; label: Label }[];
       answered: { questionId: string; text: string; correct: boolean; choice: number; options: string[]; correctAnswer: number; explanation?: string }[] };
 
 function StudentInner() {
   const sp = useSearchParams();
   const [code, setCode] = useState((sp.get("code") ?? "").toUpperCase());
-  const [name, setName] = useState("");
+  const [rooms, setRooms] = useState<{ code: string; title: string; answered: number; total: number }[]>([]);
+  useEffect(() => { fetch("/api/me/rooms").then((r) => r.json()).then((j) => setRooms(j.rooms ?? [])); }, []);
   const [sid, setSid] = useState("");
   const [err, setErr] = useState("");
   const [next, setNext] = useState<Next | null>(null);
@@ -28,11 +31,11 @@ function StudentInner() {
     const timer = setInterval(() => load(code, sid), 3000);
     return () => clearInterval(timer);
   }, [code, sid, next, load]);
-  async function join() {
-    const r = await fetch(`/api/rooms/${code}/join`, { method: "POST", body: JSON.stringify({ name }) });
+  async function join(c = code) {
+    const r = await fetch(`/api/rooms/${c}/join`, { method: "POST" });
     const j = await r.json();
     if (!r.ok) return setErr(j.error);
-    setSid(j.studentId); load(code, j.studentId);
+    setCode(c); setSid(j.studentId); load(c, j.studentId);
   }
   async function answer(q: Q, choice: number) {
     await fetch(`/api/rooms/${code}/answer`, { method: "POST", body: JSON.stringify({ studentId: sid, questionId: q.id, choice }) });
@@ -55,14 +58,22 @@ function StudentInner() {
           </div>
           <div className="card space-y-3">
             <label className="block text-sm font-medium">Room code
-              <input className="input mt-1 text-center font-mono text-3xl uppercase tracking-[0.3em]" maxLength={4} placeholder="ABCD" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-            </label>
-            <label className="block text-sm font-medium">Your name
-              <input className="input mt-1" placeholder="First name is fine" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && code && name && join()} />
+              <input className="input mt-1 text-center font-mono text-3xl uppercase tracking-[0.3em]" maxLength={4} placeholder="ABCD" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === "Enter" && code.length === 4 && join()} />
             </label>
             {err && <p className="text-sm text-red-600">{err}</p>}
-            <button className="btn w-full !py-3" disabled={!code || !name} onClick={join}>Start</button>
+            <button className="btn w-full !py-3" disabled={code.length < 4} onClick={() => join()}>Start</button>
           </div>
+          {rooms.length > 0 && (
+            <div className="card space-y-2">
+              <h2 className="text-lg font-bold">Your rooms</h2>
+              {rooms.map((r) => (
+                <button key={r.code} onClick={() => join(r.code)} className="flex w-full items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-left text-sm hover:border-[#00693e] hover:bg-green-50">
+                  <span className="font-medium">{r.title}</span>
+                  <span className="text-stone-500"><span className="font-mono">{r.code}</span> · {r.answered >= r.total ? "view results" : `${r.answered}/${r.total} answered`}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="card space-y-4">
           <h2 className="text-xl font-bold">What to expect</h2>
@@ -81,6 +92,14 @@ function StudentInner() {
       </div>
     );
   if (!next) return <p className="text-stone-500">Loading…</p>;
+  if ("noQuestions" in next)
+    return (
+      <div className="mx-auto max-w-md space-y-3 py-10 text-center">
+        <h1 className="text-2xl font-bold">{next.title}</h1>
+        <p className="text-stone-600">Your professor hasn’t added any questions to this room yet. Check back soon.</p>
+        <button className="btn-ghost" onClick={() => load(code, sid)}>Check again</button>
+      </div>
+    );
 
   if ("question" in next)
     return (
@@ -105,9 +124,9 @@ function StudentInner() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Your preliminary diagnostic</h1>
-        <p className="mt-1 max-w-2xl text-stone-600">Based on only {next.progress.total} questions. Dashed concepts are inferred from related answers, not answered directly. Grey means not enough evidence.</p>
+        <p className="mt-1 max-w-2xl text-stone-600">Based on only {next.progress.total} questions. Pale blue or orange concepts are inferred from related answers, not answered directly. Grey means not enough evidence.</p>
       </div>
-      <Graph nodes={next.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, fill: LABEL_FILL[d.label], ring: LABEL_RING.includes(d.label) }))} edges={next.edges} />
+      <Graph nodes={next.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, fill: LABEL_FILL[d.label], accent: LABEL_ACCENT[d.label] }))} edges={next.edges} />
       <div className="flex flex-wrap gap-2 text-xs">
         {(Object.keys(LABEL_FILL) as Label[]).map((l) => <span key={l} className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1"><i className="h-3 w-3 rounded-full border" style={{ background: LABEL_FILL[l] }} />{LABEL_TEXT[l]}</span>)}
       </div>
@@ -129,5 +148,5 @@ function StudentInner() {
 }
 
 export default function Student() {
-  return <Suspense><StudentInner /></Suspense>;
+  return <StudentGate><Suspense><StudentInner /></Suspense></StudentGate>;
 }
