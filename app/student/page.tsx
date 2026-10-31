@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Graph from "@/components/Graph";
 import { LABEL_TEXT } from "@/lib/engine";
@@ -23,6 +23,11 @@ function StudentInner() {
   const [challenged, setChallenged] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async (c: string, s: string) => setNext(await (await fetch(`/api/rooms/${c}/next?student=${s}`)).json()), []);
+  useEffect(() => {
+    if (!sid || !next || !("done" in next)) return;
+    const timer = setInterval(() => load(code, sid), 3000);
+    return () => clearInterval(timer);
+  }, [code, sid, next, load]);
   async function join() {
     const r = await fetch(`/api/rooms/${code}/join`, { method: "POST", body: JSON.stringify({ name }) });
     const j = await r.json();

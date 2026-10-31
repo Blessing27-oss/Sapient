@@ -1,5 +1,5 @@
-export type Concept = { id: string; name: string; importance: number; verified: boolean; foundational?: boolean };
-export type Edge = { source: string; target: string; weight: number; type: "related" };
+export type Concept = { id: string; name: string; importance: number; verified: boolean; foundational?: boolean; description?: string; sourcePage?: number };
+export type Edge = { source: string; target: string; weight: number; type: "related"; rationale?: string };
 export type Question = {
   id: string;
   text: string;
@@ -10,6 +10,7 @@ export type Question = {
   explanation?: string;
   approved?: boolean;
   invalidated?: boolean;
+  revision?: number;
 };
 export type Response = { questionId: string; choice: number; correct: boolean; at: number };
 export type Student = { id: string; name: string; responses: Response[] };

@@ -1,4 +1,4 @@
-import { QUESTION_BUDGET, classify, computeState, selectNextQuestion, validResponses } from "@/lib/engine";
+import { QUESTION_BUDGET, gradeResponse, classify, computeState, selectNextQuestion, validResponses } from "@/lib/engine";
 import { getRoom } from "@/lib/store";
 
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   }));
   const answered = valid.map((r) => {
     const q = room.questions.find((x) => x.id === r.questionId)!;
-    return { questionId: q.id, text: q.text, correct: r.correct, choice: r.choice, options: q.options, correctAnswer: q.correctAnswer, explanation: q.explanation };
+    return { questionId: q.id, text: q.text, correct: gradeResponse(q, r), choice: r.choice, options: q.options, correctAnswer: q.correctAnswer, explanation: q.explanation };
   });
   return Response.json({ done: true, progress, diagnostic, answered, edges: room.edges });
 }

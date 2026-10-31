@@ -1,52 +1,135 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { SAMPLE } from "./sample.ts";
 import type { Concept, Edge, Question } from "./types.ts";
 
 export type Extracted = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; source: "llm" | "sample"; note?: string };
 
-const SCHEMA = {
+const MAX_SOURCE_CHARS = 400_000;
+
+const schema = {
   type: "object",
+  additionalProperties: false,
+  required: ["title", "concepts", "relationships", "questions"],
   properties: {
     title: { type: "string" },
-    concepts: { type: "array", items: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, importance: { type: "number" } }, required: ["id", "name", "importance"] } },
-    edges: { type: "array", items: { type: "object", properties: { source: { type: "string" }, target: { type: "string" }, weight: { type: "number" } }, required: ["source", "target", "weight"] } },
-    questions: { type: "array", items: { type: "object", properties: {
-      id: { type: "string" }, text: { type: "string" }, options: { type: "array", items: { type: "string" } },
-      correctAnswer: { type: "integer" }, conceptIds: { type: "array", items: { type: "string" } },
-      sourcePage: { type: "integer" }, explanation: { type: "string" } },
-      required: ["id", "text", "options", "correctAnswer", "conceptIds", "explanation"] } },
+    concepts: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "name", "description", "foundational", "sourcePage"],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          foundational: { type: "boolean" },
+          sourcePage: { type: "integer" },
+        },
+      },
+    },
+    relationships: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["source", "target", "weight", "rationale"],
+        properties: {
+          source: { type: "string" },
+          target: { type: "string" },
+          weight: { type: "number" },
+          rationale: { type: "string" },
+        },
+      },
+    },
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "text", "options", "correctAnswer", "conceptIds", "explanation", "sourcePage"],
+        properties: {
+          id: { type: "string" },
+          text: { type: "string" },
+          options: { type: "array", items: { type: "string" } },
+          correctAnswer: { type: "integer" },
+          conceptIds: { type: "array", items: { type: "string" } },
+          explanation: { type: "string" },
+          sourcePage: { type: "integer" },
+        },
+      },
+    },
   },
-  required: ["title", "concepts", "edges", "questions"],
 } as const;
 
-export async function extract(text: string): Promise<Extracted> {
-  if (!process.env.ANTHROPIC_API_KEY || text.trim().length < 200) {
-    return { ...SAMPLE, source: "sample", note: process.env.ANTHROPIC_API_KEY ? "PDF had too little text; loaded the sample lesson." : "No ANTHROPIC_API_KEY set; loaded the sample lesson." };
+const SYSTEM = `You help a professor build a short classroom diagnostic from their own course material. Your output is a draft the professor will review, edit, and approve before any student sees it.
+
+From the lecture text (pages are marked "[Page N]"):
+- Propose 8–12 concepts the material actually teaches, ids "c1", "c2", .... Mark a concept foundational only if other concepts in this material clearly build on it. sourcePage is the page where it is introduced.
+- Propose a few relationships (roughly 1–2 per concept) between concepts that are pedagogically related. Treat them as undirected suggestions, not proven prerequisites. weight is a heuristic strength from 0.1 to 0.5.
+- Write about 8 multiple-choice questions, ids "q1", "q2", ..., each with exactly 4 options and one unambiguous correct answer (0-based correctAnswer index; vary its position). Tag each question with the 1–3 concept ids it directly tests. Prefer questions that check understanding over recall. Ground each in the given pages and cite sourcePage. The explanation says briefly why the answer is right.
+- Together the questions should cover most concepts, including the foundational ones.
+Use only the provided material; if notation is ambiguous, follow the material's own convention.`;
+
+export async function extract(pages: string[]): Promise<Extracted> {
+  const source = pages.map((t, i) => `[Page ${i + 1}]\n${t.trim()}`).join("\n\n");
+  if (!source.replace(/\[Page \d+\]/g, "").trim()) {
+    throw new Error("No extractable text in this PDF (it may be scanned images).");
   }
-  try {
-    const client = new Anthropic();
-    const res = await client.messages.create({
-      model: "claude-sonnet-5-5",
-      max_tokens: 6000,
-      tools: [{ name: "propose_assessment", description: "Propose an editable concept map and questions.", input_schema: SCHEMA as never }],
-      tool_choice: { type: "tool", name: "propose_assessment" },
-      messages: [{ role: "user", content:
-        `From this lecture, propose 8-12 concepts (ids c1..cN, importance 0-1), undirected relationship edges (weight 0.1-0.4 = possible assessment relevance, not proof of mastery), and 8-10 multiple-choice questions with 4 options each. Each question lists the concepts it touches (1-3), a source page number if inferable, and a short explanation. Put the correct answer anywhere (vary the index).\n\n${text.slice(0, 40000)}` }],
-    });
-    const block = res.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") throw new Error("no tool output");
-    const d = block.input as { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[] };
-    const ids = new Set(d.concepts.map((c) => c.id));
-    return {
-      title: d.title,
-      concepts: d.concepts.map((c) => ({ ...c, verified: false })),
-      edges: d.edges.filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({ ...e, type: "related" as const })),
-      questions: d.questions
-        .map((q) => ({ ...q, conceptIds: q.conceptIds.filter((i) => ids.has(i)), approved: false }))
-        .filter((q) => q.conceptIds.length && q.correctAnswer >= 0 && q.correctAnswer < q.options.length),
-      source: "llm",
-    };
-  } catch (err) {
-    return { ...SAMPLE, source: "sample", note: `AI extraction failed (${(err as Error).message}); loaded the sample lesson.` };
+  if (source.length > MAX_SOURCE_CHARS) {
+    throw new Error(`This PDF has ${source.length.toLocaleString()} characters of text; the demo accepts up to ${MAX_SOURCE_CHARS.toLocaleString()}. Try a single lecture's notes.`);
   }
+
+  const client = new Anthropic();
+  const response = await client.beta.messages.create({
+    model: "claude-opus-5-5",
+    max_tokens: 16000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    system: SYSTEM,
+    output_config: { effort: "medium", format: { type: "json_schema", schema } },
+    messages: [{ role: "user", content: `Lecture material:\n\n${source}` }],
+  });
+
+  if (response.stop_reason === "refusal") throw new Error("The model declined to process this document.");
+  if (response.stop_reason === "max_tokens") throw new Error("The model's response was cut off; try a shorter PDF.");
+  const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+  return sanitize(JSON.parse(text), pages.length);
+}
+
+type Raw = {
+  title: string;
+  concepts: { id: string; name: string; description: string; foundational: boolean; sourcePage: number }[];
+  relationships: { source: string; target: string; weight: number; rationale: string }[];
+  questions: { id: string; text: string; options: string[]; correctAnswer: number; conceptIds: string[]; explanation: string; sourcePage: number }[];
+};
+
+// Drop anything malformed rather than trusting the model's ids and indices.
+export function sanitize(raw: Raw, pageCount: number): Extracted {
+  const page = (p: number) => (Number.isInteger(p) && p >= 1 && p <= pageCount ? p : undefined);
+  const conceptSeen = new Set<string>();
+  const concepts = raw.concepts.filter((c) => c.id && !conceptSeen.has(c.id) && (conceptSeen.add(c.id), true)).map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    foundational: c.foundational,
+    importance: c.foundational ? 1 : 0.6,
+    verified: false,
+    sourcePage: page(c.sourcePage),
+  }));
+  const ids = new Set(concepts.map((c) => c.id));
+  const seen = new Set<string>();
+  const edges = raw.relationships
+    .filter((e) => Number.isFinite(e.weight) && ids.has(e.source) && ids.has(e.target) && e.source !== e.target)
+    .filter((e) => {
+      const key = [e.source, e.target].sort().join("|");
+      return seen.has(key) ? false : (seen.add(key), true);
+    })
+    .map((e) => ({ ...e, type: "related" as const, weight: Math.min(0.5, Math.max(0.1, Math.round(e.weight * 10) / 10)) }));
+  const questionSeen = new Set<string>();
+  const questions = raw.questions
+    .filter((q) => q.id && !questionSeen.has(q.id) && (questionSeen.add(q.id), true))
+    .map((q) => ({ ...q, conceptIds: [...new Set(q.conceptIds.filter((id) => ids.has(id)))] }))
+    .filter((q) => q.options.length === 4 && Number.isInteger(q.correctAnswer) && q.correctAnswer >= 0 && q.correctAnswer < q.options.length && q.conceptIds.length > 0)
+    .map((q) => ({ ...q, sourcePage: page(q.sourcePage), approved: false, invalidated: false, revision: 0 }));
+  if (!concepts.length || !questions.length) throw new Error("No usable concepts or questions were generated.");
+  return { title: raw.title, concepts, edges, questions, source: "llm" };
 }
