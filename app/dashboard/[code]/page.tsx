@@ -18,7 +18,7 @@ type Dash = {
   insights: Insight[];
 };
 const GROUPS: { label: Label; title: string; chip: string }[] = [
-  { label: "strength", title: "Showed they know", chip: "bg-green-100 text-green-800" },
+  { label: "strength", title: "Showed they know", chip: "bg-[#e3f1eb] fold-text" },
   { label: "review", title: "Needs review", chip: "bg-red-100 text-red-800" },
   { label: "mixed", title: "Mixed answers", chip: "bg-amber-100 text-amber-800" },
   { label: "tentative-up", title: "Probably fine (inferred)", chip: "bg-sky-50 text-sky-700 ring-1 ring-sky-200" },
@@ -86,7 +86,7 @@ function Dashboard({ code }: { code: string }) {
       id: r.conceptId, label: r.name, value: share ?? 0, muted: share === null,
       display: share === null ? "not asked" : pct(share),
       detail: share === null ? "No student has answered a question on this yet" : `${r.asked - r.missed} of ${r.asked} students who were asked got it right`,
-      color: r.flag ? "#d97706" : "#00693e", tag: r.flag ? "review" : undefined,
+      color: r.flag ? "#d97706" : "fold", tag: r.flag ? "review" : undefined,
     }));
 
   const studentRows: BarRow[] = [...scored]
@@ -95,7 +95,7 @@ function Dashboard({ code }: { code: string }) {
       id: s.id, label: s.name, value: s.total ? s.correct / s.total : 0, muted: s.total === 0,
       display: s.total ? `${s.correct}/${s.total}` : "waiting",
       detail: s.done ? `Finished · ${s.correct} of ${s.total} correct` : `${s.answered} of 3 answered so far`,
-      color: s.done ? "#00693e" : "#6aa88a",
+      color: s.done ? "fold" : "fold-soft",
     }));
 
   const questionRows: BarRow[] = live.map((q) => {
@@ -104,7 +104,7 @@ function Dashboard({ code }: { code: string }) {
     return { q, n, ok };
   }).filter((x) => x.n > 0).sort((a, b) => a.ok / a.n - b.ok / b.n).map(({ q, n, ok }) => ({
     id: q.id, label: short(q.text), value: ok / n, display: pct(ok / n),
-    detail: `${ok} of ${n} answered correctly · ${q.text}`, color: ok / n < 0.5 ? "#d97706" : "#00693e", tag: ok / n < 0.5 ? "hard" : undefined,
+    detail: `${ok} of ${n} answered correctly · ${q.text}`, color: ok / n < 0.5 ? "#d97706" : "fold", tag: ok / n < 0.5 ? "hard" : undefined,
   }));
 
   const tabs = [["overview", "Overview"], ["students", `Students (${d.students.length})`], ["questions", `Questions (${live.length})`]] as const;
@@ -115,8 +115,8 @@ function Dashboard({ code }: { code: string }) {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#00693e]">
-            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-green-600" /></span>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest fold-text">
+            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#f1f8f5]0 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#00693e]" /></span>
             Live dashboard
           </p>
           <h1 className="text-3xl font-bold">{d.room.title}</h1>
@@ -151,7 +151,7 @@ function Dashboard({ code }: { code: string }) {
 
       <div className="flex gap-1 border-b border-stone-200">
         {tabs.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === k ? "border-[#00693e] text-[#00693e]" : "border-transparent text-stone-500 hover:text-stone-700"}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === k ? "fold-tab fold-text" : "border-transparent text-stone-500 hover:text-stone-700"}`}>{label}</button>
         ))}
       </div>
 
@@ -193,7 +193,7 @@ function Dashboard({ code }: { code: string }) {
                     <div key={r.conceptId} className="space-y-2 border-b border-stone-100 pb-4 last:border-0 last:pb-0">
                       <p className="text-sm"><b>{r.name}</b> — {r.missed} of {r.asked} students missed it. Consider revisiting it.</p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <button className={`btn-ghost ${insight(r.conceptId)?.status === "useful" ? "!bg-green-100" : ""}`} onClick={() => post("insight", { conceptId: r.conceptId, status: "useful" })}>Useful</button>
+                        <button className={`btn-ghost ${insight(r.conceptId)?.status === "useful" ? "!bg-[#e3f1eb]" : ""}`} onClick={() => post("insight", { conceptId: r.conceptId, status: "useful" })}>Useful</button>
                         <button className={`btn-ghost ${insight(r.conceptId)?.status === "dismissed" ? "!bg-stone-200" : ""}`} onClick={() => post("insight", { conceptId: r.conceptId, status: "dismissed" })}>Dismiss</button>
                         <input className="input max-w-xs" placeholder="Teaching note" defaultValue={insight(r.conceptId)?.note ?? ""}
                           onBlur={(e) => post("insight", { conceptId: r.conceptId, status: insight(r.conceptId)?.status ?? "open", note: e.target.value })} />
@@ -227,13 +227,13 @@ function Dashboard({ code }: { code: string }) {
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 font-bold text-stone-600">{s.name.charAt(0).toUpperCase()}</span>
                       <div><p className="font-semibold leading-tight">{s.name}</p><p className="text-xs text-stone-500">{s.total ? `${s.correct} of ${s.total} correct` : "No answers yet"}</p></div>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${s.done ? "bg-green-100 text-green-800" : "bg-stone-100 text-stone-600"}`}>{s.done ? "Finished" : `${s.answered} of 3 answered`}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${s.done ? "bg-[#e3f1eb] fold-text" : "bg-stone-100 text-stone-600"}`}>{s.done ? "Finished" : `${s.answered} of 3 answered`}</span>
                   </div>
                   {s.path.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {s.path.map((p, i) => (
                         <span key={p.questionId} title={`${d.room.questions.find((q) => q.id === p.questionId)?.text ?? ""}${p.invalidated ? " (withdrawn, not counted)" : p.revised ? " (revised)" : ""}`}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${p.invalidated ? "bg-stone-100 text-stone-400 line-through" : p.correct ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${p.invalidated ? "bg-stone-100 text-stone-400 line-through" : p.correct ? "bg-[#e3f1eb] fold-text" : "bg-red-100 text-red-800"}`}>
                           Answer {i + 1} {p.invalidated ? "" : p.correct ? "✓" : "✗"}
                         </span>
                       ))}
@@ -294,7 +294,7 @@ function Dashboard({ code }: { code: string }) {
                 const r = await fetch(`/api/rooms/${code}/questions`, { method: "POST", body: JSON.stringify({ questions: qDraft }) });
                 if (r.ok) { setQDirty(false); setQSaved(true); setTimeout(() => setQSaved(false), 2000); load(); } else setError("Could not save the questions.");
               }}>Save question changes</button>}
-              {!qDirty && qSaved && <span className="text-sm font-semibold text-green-700">Saved ✓</span>}
+              {!qDirty && qSaved && <span className="text-sm font-semibold fold-text">Saved ✓</span>}
             </div>
             <QuestionList questions={qDraft} concepts={d.room.concepts} onChange={(q) => { setQDraft(q); setQDirty(true); }} />
           </div>

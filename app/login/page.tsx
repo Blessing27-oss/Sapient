@@ -34,7 +34,7 @@ function LoginForm() {
         {mode === "signup" && (
           <div className="grid grid-cols-2 gap-2">
             {(["student", "professor"] as const).map((r) => (
-              <button type="button" key={r} onClick={() => setRole(r)} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${role === r ? "border-[#00693e] bg-green-50 text-[#00693e]" : "border-stone-300 text-stone-600"}`}>
+              <button type="button" key={r} onClick={() => setRole(r)} className={`rounded-lg border px-3 py-3 text-sm font-semibold capitalize ${role === r ? "border-[#00693e] bg-[#f1f8f5] fold-text" : "border-stone-300 text-stone-600"}`}>
                 {r === "student" ? "🎓 " : "🧑‍🏫 "}{r}
               </button>
             ))}
@@ -47,7 +47,7 @@ function LoginForm() {
       </form>
       <p className="text-center text-sm text-stone-500">
         {mode === "signin" ? "New here?" : "Already have an account?"}{" "}
-        <button className="font-semibold text-[#00693e] underline" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setErr(""); }}>
+        <button className="font-semibold fold-text underline" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setErr(""); }}>
           {mode === "signin" ? "Create an account" : "Sign in"}
         </button>
       </p>

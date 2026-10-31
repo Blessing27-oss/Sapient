@@ -138,12 +138,12 @@ function Workspace() {
       <div className="grid items-start gap-10 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-6">
           <div>
-            <p className="text-sm font-semibold text-[#00693e]">Step 1 of 3</p>
+            <p className="text-sm font-semibold fold-text">Step 1 of 3</p>
             <h1 className="text-4xl font-bold">Upload your lecture</h1>
             <p className="mt-2 text-stone-600">We read your PDF and propose the key concepts, how they connect, and quiz questions. You review and correct everything before any student sees it.</p>
           </div>
-          <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white px-8 py-16 text-center transition hover:border-[#00693e] hover:bg-green-50/40 ${busy ? "pointer-events-none opacity-60" : ""}`}>
-            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl">📄</span>
+          <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white px-8 py-16 text-center transition hover:border-[#00693e] hover:bg-[#f1f8f5]/40 ${busy ? "pointer-events-none opacity-60" : ""}`}>
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f1f8f5] text-3xl">📄</span>
             <span className="mt-4 text-lg font-semibold">{busy ? "Reading your lecture and building the concept map…" : "Click to choose a PDF"}</span>
             <span className="mt-1 text-sm text-stone-500">Lecture notes or slides · text-based PDFs work best</span>
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
@@ -162,7 +162,7 @@ function Workspace() {
             <div className="card space-y-2">
               <h2 className="text-lg font-bold">Your rooms</h2>
               {rooms.map((r) => (
-                <Link key={r.code} href={`/dashboard/${r.code}`} className="flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-sm hover:border-[#00693e] hover:bg-green-50">
+                <Link key={r.code} href={`/dashboard/${r.code}`} className="flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-sm hover:border-[#00693e] hover:bg-[#f1f8f5]">
                   <span className="font-medium">{r.title}</span>
                   <span className="text-stone-500"><span className="font-mono">{r.code}</span> · {r.students} student{r.students === 1 ? "" : "s"}</span>
                 </Link>
@@ -180,7 +180,7 @@ function Workspace() {
             ["See the gaps", "Each student answers 3 adaptive questions. Your dashboard shows where the class is stuck."],
           ].map(([t, d], i) => (
             <div key={t} className="flex gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00693e] text-sm font-bold text-white">{i + 1}</span>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full fold text-sm font-bold text-white">{i + 1}</span>
               <div><p className="font-semibold">{t}</p><p className="text-sm text-stone-500">{d}</p></div>
             </div>
           ))}
@@ -220,14 +220,14 @@ function Workspace() {
   return (
     <div className="space-y-6 pb-24">
       <div>
-        <p className="text-sm font-semibold text-[#00693e]">Step 2 of 3 · Review</p>
+        <p className="text-sm font-semibold fold-text">Step 2 of 3 · Review</p>
         <input className="w-full bg-transparent font-serif text-3xl font-bold outline-none focus:underline" value={draft.title} onChange={(e) => patch({ title: e.target.value })} />
         {draft.note && <p className="mt-1 text-sm text-amber-700">{draft.note}</p>}
       </div>
 
       <div className="flex gap-1 border-b border-stone-200">
         {([["map", `Concept map (${draft.concepts.length})`], ["questions", `Questions (${approved}/${draft.questions.length} approved)`]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === k ? "border-[#00693e] text-[#00693e]" : "border-transparent text-stone-500"}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === k ? "fold-tab fold-text" : "border-transparent text-stone-500"}`}>{label}</button>
         ))}
       </div>
 

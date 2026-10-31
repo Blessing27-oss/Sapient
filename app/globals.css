@@ -1,22 +1,78 @@
 @import "tailwindcss";
 body { background: #faf9f6; color: #1c1917; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 h1, h2 { font-family: Georgia, "Times New Roman", serif; letter-spacing: -0.01em; }
-.btn { @apply inline-flex items-center justify-center rounded-lg bg-[#00693e] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#014d2e] disabled:cursor-not-allowed disabled:opacity-40; }
+.btn { @apply inline-flex items-center justify-center rounded-lg bg-[#00693e] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-40; }
 .btn-ghost { @apply inline-flex items-center justify-center rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-100; }
 .card { @apply rounded-2xl border border-stone-200 bg-white p-5 shadow-sm; }
 .input { @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#00693e] focus:ring-2 focus:ring-[#00693e]/20; }
 .chip { @apply rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-700; }
 
-/* Landing page motion (all of it is switched off for people who prefer reduced motion) */
-@keyframes kg-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+/* Landing intro (under 5s): S draws in (0-1s) -> cap drops on (1.2s) and, the instant it lands (1.65s), the face pops in already smiling -> S slides left as "apient" unfolds (2.4-3.4s) -> "Sapient" flies to the nav corner (3.5-4.4s, see LandingIntro) -> page content reveals at ~4.4s.
+   Everything is skipped for people who prefer reduced motion. */
+@keyframes lg-draw { from { stroke-dashoffset: 149; } to { stroke-dashoffset: 0; } }
+@keyframes lg-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lg-eye { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+@keyframes lg-mouth {
+  0% { opacity: 0; transform: scaleY(0); }
+  55% { opacity: 1; transform: scaleY(1.4); }
+  100% { opacity: 1; transform: scaleY(1); }
+}
+@keyframes lg-drop {
+  0% { opacity: 0; transform: translateY(-90px) rotate(-55deg); }
+  55% { opacity: 1; transform: translateY(7px) rotate(9deg); }
+  78% { transform: translateY(-3px) rotate(-3deg); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes lg-sway { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+@keyframes lg-sway2 { from { transform: rotate(10deg); } to { transform: rotate(-10deg); } }
+@keyframes lg-pop { 0% { opacity: 0; transform: scale(0) rotate(-40deg); } 70% { transform: scale(1.3) rotate(8deg); } 100% { opacity: 1; transform: scale(1); } }
+.lg-draw { stroke-dasharray: 149; animation: lg-draw 1s ease-in-out both; }
+.lg-bands { animation: lg-fade 0.4s ease-out 0.9s both; }
+.lg-eye { transform-box: fill-box; transform-origin: center; animation: lg-eye 0.4s cubic-bezier(.2,1.6,.4,1) 1.65s both; }
+.lg-mouth { transform-box: fill-box; transform-origin: center; animation: lg-mouth 0.5s ease-out 1.65s both; }
+.lg-hat { transform-box: fill-box; transform-origin: center; animation: lg-drop 0.8s cubic-bezier(.3,.9,.4,1) 1.2s both; }
+.lg-cord { transform-box: fill-box; transform-origin: top center; animation: lg-sway 2.8s ease-in-out 1.7s infinite alternate both; }
+.lg-fringe { transform-box: fill-box; transform-origin: top center; animation: lg-sway2 2s ease-in-out 1.7s infinite alternate both; }
+@keyframes lg-expand { from { grid-template-columns: 0fr; } to { grid-template-columns: 1fr; } }
+@keyframes lg-letter { from { opacity: 0; transform: translateY(0.45em); } to { opacity: 1; transform: none; } }
+.lg-apient { grid-template-columns: 0fr; animation: lg-expand 0.9s cubic-bezier(.5,0,.2,1) 2.4s forwards; }
+.lg-letter { display: inline-block; opacity: 0; animation: lg-letter 0.45s cubic-bezier(.2,1.2,.4,1) both; animation-delay: calc(2.55s + var(--i) * 0.08s); }
+.lg-spark { transform-box: fill-box; transform-origin: center; animation: lg-pop 0.5s ease-out both; }
+
+/* the nav brand stays hidden until the flying "Sapient" lands on it */
+[data-nav-brand] { transition: opacity 0.35s ease; }
+/* page content under the intro: held (and its animations paused) until the logo has landed */
+.lg-rest { opacity: 0; }
+.lg-rest * { animation-play-state: paused; }
+.lg-rest.lg-go { opacity: 1; transition: opacity 0.5s ease; }
+.lg-rest.lg-go * { animation-play-state: running; }
+
+/* concept-tree demo */
+@keyframes kg-draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
 @keyframes kg-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
 @keyframes kg-ring { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
 @keyframes kg-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.kg-edge { stroke-dasharray: 1; stroke-dashoffset: 1; animation: kg-draw 0.9s ease-out forwards; }
+.kg-edge { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: kg-draw 0.9s ease-out forwards; }
 .kg-node { opacity: 0; transform-box: fill-box; transform-origin: center; animation: kg-pop 0.5s cubic-bezier(.2,1.4,.4,1) forwards; }
 .kg-ring { transform-box: fill-box; transform-origin: center; animation: kg-ring 2.2s ease-out infinite; }
 .kg-float { animation: kg-float 6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .kg-edge, .kg-node, .kg-ring, .kg-float { animation: none; opacity: 1; stroke-dashoffset: 0; }
-  .kg-ring { opacity: 0; }
+  .lg-draw, .lg-bands, .lg-eye, .lg-mouth, .lg-hat, .lg-cord, .lg-fringe, .lg-spark, .lg-letter, .kg-edge, .kg-node, .kg-float { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+  .kg-ring { animation: none; opacity: 0; }
+  .lg-apient { animation: none; grid-template-columns: 1fr; }
+  .lg-rest { opacity: 1; }
 }
+
+/* One recipe, taken from the logo S: two flat greens (#00693e and #16895c) in wide segments, each about as long as the shape is thick,
+   with only a slightly softened edge between them. --fp is the segment length; it scales with the element (see each use). */
+@property --fp { syntax: "<length>"; inherits: true; initial-value: 2.2rem; }
+.fold, .btn, .fold-text, .hover-fold:hover {
+  background-image: repeating-linear-gradient(110deg,
+    #00693e calc(var(--fp) * 0.1), #00693e calc(var(--fp) * 0.9),
+    #16895c calc(var(--fp) * 1.1), #16895c calc(var(--fp) * 1.9),
+    #00693e calc(var(--fp) * 2.1));
+}
+.fold { background-color: #00693e; --fp: 2.2rem; }          /* tiles, cards, badges */
+.btn { --fp: 1.5rem; }                                      /* a button is about 2.75rem tall: ~2 segments per height */
+.fold-text, .hover-fold:hover { --fp: 0.34em; -webkit-background-clip: text; background-clip: text; color: transparent; }  /* a letter shows both greens */
+.fold-tab { --fp: 14px; border-image: repeating-linear-gradient(90deg, #00693e calc(var(--fp) * 0.1), #00693e calc(var(--fp) * 0.9), #16895c calc(var(--fp) * 1.1), #16895c calc(var(--fp) * 1.9), #00693e calc(var(--fp) * 2.1)) 1; }
