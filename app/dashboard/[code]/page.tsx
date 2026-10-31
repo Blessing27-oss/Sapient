@@ -6,10 +6,10 @@ import QuestionList from "@/components/QuestionList";
 import { BarRows, Panel, StatTile, type BarRow } from "@/components/charts";
 import ShareCard from "@/components/ShareCard";
 import { isLive } from "@/lib/questions";
-import type { Concept, Insight, Label, Question } from "@/lib/types";
+import type { Concept, Insight, Label, MapLayout, Question } from "@/lib/types";
 
 type Dash = {
-  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
+  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; layout?: MapLayout; questions: Question[] };
   answeredQuestionIds: string[];
   students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
@@ -174,8 +174,9 @@ function Dashboard({ code }: { code: string }) {
 
           <Panel title="Concept map" subtitle="Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet.">
             <Graph
-              nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
+              nodes={d.classRows.map((r) => ({ id: r.conceptId, name: (d.room.concepts.find((c) => c.id === r.conceptId)?.foundational ? "★ " : "") + r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
               edges={d.room.edges}
+              layout={d.room.layout}
             />
           </Panel>
 

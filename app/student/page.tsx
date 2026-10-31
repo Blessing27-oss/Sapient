@@ -1,147 +1,380 @@
 "use client";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Graph from "@/components/Graph";
+import Practice from "@/components/Practice";
 import { StudentGate } from "@/components/ProfessorGate";
+import StudyChat from "@/components/StudyChat";
 import { LABEL_TEXT } from "@/lib/engine";
 import { LABEL_ACCENT, LABEL_FILL } from "@/lib/ui";
-import type { Label } from "@/lib/types";
+import type { Label, MapLayout } from "@/lib/types";
 
 type Q = { id: string; text: string; options: string[] };
 type Progress = { answered: number; total: number };
+type Diag = { conceptId: string; name: string; foundational?: boolean; description?: string; label: Label; evidence: { correct: number; wrong: number } };
+type Answered = { questionId: string; text: string; correct: boolean; choice: number; options: string[]; correctAnswer: number; explanation?: string };
 type Next =
   | { question: Q; progress: Progress }
   | { noQuestions: true; title: string }
-  | { done: true; progress: Progress; edges: { source: string; target: string; weight: number }[]; diagnostic: { conceptId: string; name: string; label: Label }[];
-      answered: { questionId: string; text: string; correct: boolean; choice: number; options: string[]; correctAnswer: number; explanation?: string }[] };
+  | { done: true; progress: Progress; edges: { source: string; target: string; weight: number }[]; layout?: MapLayout; diagnostic: Diag[]; answered: Answered[] };
+type MyRoom = { code: string; title: string; answered: number; total: number };
+
+const LABEL_NOTE: Record<Label, string> = {
+  strength: "You answered a question on this correctly. One answer is a good sign, not proof.",
+  review: "You missed a question on this. A good place to start.",
+  mixed: "Your answers on this disagreed with each other.",
+  "tentative-up": "Not asked directly. Your answers on related concepts suggest you may be fine here.",
+  "tentative-down": "Not asked directly. Your answers on related concepts suggest a possible gap.",
+  unknown: "Not enough evidence either way yet.",
+};
+
+// Stable per-student option order, so the keyed answer isn't always in the same slot.
+function shuffledOrder(n: number, seed: string): number[] {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const order = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+    const j = h % (i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
 
 function StudentInner() {
   const sp = useSearchParams();
   const [code, setCode] = useState((sp.get("code") ?? "").toUpperCase());
-  const [rooms, setRooms] = useState<{ code: string; title: string; answered: number; total: number }[]>([]);
-  useEffect(() => { fetch("/api/me/rooms").then((r) => r.json()).then((j) => setRooms(j.rooms ?? [])); }, []);
+  const [name, setName] = useState("");
+  const [rooms, setRooms] = useState<MyRoom[]>([]);
   const [sid, setSid] = useState("");
+  const [title, setTitle] = useState("");
+  const [started, setStarted] = useState(false);
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
   const [next, setNext] = useState<Next | null>(null);
-  const [challenged, setChallenged] = useState<Record<string, boolean>>({});
 
-  const load = useCallback(async (c: string, s: string) => setNext(await (await fetch(`/api/rooms/${c}/next?student=${s}`)).json()), []);
+  // The student's name and rooms come from their account (StudentGate guarantees a session).
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => setName(j.user?.name ?? ""));
+    fetch("/api/me/rooms").then((r) => r.json()).then((j) => setRooms(j.rooms ?? []));
+  }, []);
+
+  const load = useCallback(async (c: string, s: string): Promise<Next | null> => {
+    const r = await fetch(`/api/rooms/${c}/next?student=${s}`);
+    if (!r.ok) return null;
+    const j: Next = await r.json();
+    setNext(j);
+    return j;
+  }, []);
+
+  // Keep results live so a professor's invalidation shows up without a refresh.
   useEffect(() => {
     if (!sid || !next || !("done" in next)) return;
     const timer = setInterval(() => load(code, sid), 3000);
     return () => clearInterval(timer);
   }, [code, sid, next, load]);
+
   async function join(c = code) {
-    const r = await fetch(`/api/rooms/${c}/join`, { method: "POST" });
-    const j = await r.json();
-    if (!r.ok) return setErr(j.error);
-    setCode(c); setSid(j.studentId); load(c, j.studentId);
-  }
-  async function answer(q: Q, choice: number) {
-    await fetch(`/api/rooms/${code}/answer`, { method: "POST", body: JSON.stringify({ studentId: sid, questionId: q.id, choice }) });
-    load(code, sid);
-  }
-  async function challenge(questionId: string) {
-    const reason = prompt("Why do you disagree with this question?");
-    if (!reason) return;
-    await fetch(`/api/rooms/${code}/challenge`, { method: "POST", body: JSON.stringify({ studentId: sid, questionId, reason }) });
-    setChallenged((c) => ({ ...c, [questionId]: true }));
+    setBusy(true); setErr("");
+    try {
+      const r = await fetch(`/api/rooms/${c}/join`, { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) return setErr(j.error === "Room not found" ? "No class with that code. Check it with your professor." : j.error);
+      const n = await load(c, j.studentId);
+      setCode(c); setSid(j.studentId); setTitle(j.title ?? "");
+      // Returning students resume where they left off; only a fresh start gets the ready screen.
+      setStarted(!(n && "question" in n && n.progress.answered === 0));
+    } finally { setBusy(false); }
   }
 
-  if (!sid)
-    return (
-      <div className="mx-auto grid max-w-4xl items-start gap-10 py-6 md:grid-cols-2">
-        <div className="space-y-6">
-          <div>
-            <h1 className="text-4xl font-bold">Join your class</h1>
-            <p className="mt-2 text-stone-600">Enter the code your professor shared and your name to begin.</p>
-          </div>
-          <div className="card space-y-3">
-            <label className="block text-sm font-medium">Room code
-              <input className="input mt-1 text-center font-mono text-3xl uppercase tracking-[0.3em]" maxLength={4} placeholder="ABCD" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === "Enter" && code.length === 4 && join()} />
-            </label>
-            {err && <p className="text-sm text-red-600">{err}</p>}
-            <button className="btn w-full !py-3" disabled={code.length < 4} onClick={() => join()}>Start</button>
-          </div>
-          {rooms.length > 0 && (
-            <div className="card space-y-2">
-              <h2 className="text-lg font-bold">Your rooms</h2>
-              {rooms.map((r) => (
-                <button key={r.code} onClick={() => join(r.code)} className="flex w-full items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-left text-sm hover:border-[#00693e] hover:bg-green-50">
-                  <span className="font-medium">{r.title}</span>
-                  <span className="text-stone-500"><span className="font-mono">{r.code}</span> · {r.answered >= r.total ? "view results" : `${r.answered}/${r.total} answered`}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="card space-y-4">
-          <h2 className="text-xl font-bold">What to expect</h2>
-          {[
-            ["3 questions", "Just three multiple-choice questions, one at a time."],
-            ["They adapt", "Your next question depends on how you answered, so you and a classmate may see different ones."],
-            ["Your results", "At the end you get a map of what you showed you know, what needs review, and what is only a guess."],
-            ["You can push back", "Think a question was unclear? Tell your professor and they can review it."],
-          ].map(([t, d]) => (
-            <div key={t} className="flex gap-3">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#00693e]" />
-              <div><p className="font-semibold">{t}</p><p className="text-sm text-stone-500">{d}</p></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  if (!sid) return <JoinScreen code={code} setCode={setCode} rooms={rooms} err={err} busy={busy} onJoin={join} />;
+  if (!started) return <ReadyScreen title={title} name={name} code={code} onStart={() => setStarted(true)} />;
   if (!next) return <p className="text-stone-500">Loading…</p>;
-  if ("noQuestions" in next)
-    return (
-      <div className="mx-auto max-w-md space-y-3 py-10 text-center">
-        <h1 className="text-2xl font-bold">{next.title}</h1>
-        <p className="text-stone-600">Your professor hasn’t added any questions to this room yet. Check back soon.</p>
-        <button className="btn-ghost" onClick={() => load(code, sid)}>Check again</button>
-      </div>
-    );
+  if ("noQuestions" in next) return <EmptyRoom title={next.title} onRetry={() => load(code, sid)} />;
+  if ("question" in next) return <QuizScreen key={next.question.id} q={next.question} progress={next.progress} sid={sid} code={code} onAnswered={() => load(code, sid)} />;
+  if (!("done" in next)) return <p className="text-stone-500">Loading…</p>;
+  return <Results data={next} name={name} title={title} code={code} sid={sid} />;
+}
 
-  if ("question" in next)
-    return (
-      <div className="mx-auto max-w-xl space-y-5">
-        <div>
-          <div className="mb-2 h-2 overflow-hidden rounded-full bg-stone-200"><div className="h-full bg-[#00693e] transition-all" style={{ width: `${(next.progress.answered / next.progress.total) * 100}%` }} /></div>
-          <p className="text-sm text-stone-500">Question {next.progress.answered + 1} of {next.progress.total}</p>
+function JoinScreen({ code, setCode, rooms, err, busy, onJoin }: {
+  code: string; setCode: (s: string) => void; rooms: MyRoom[]; err: string; busy: boolean; onJoin: (c?: string) => void;
+}) {
+  const ready = code.length === 4;
+  return (
+    <div className="mx-auto grid max-w-5xl items-center gap-12 py-6 md:grid-cols-[1.1fr_1fr]">
+      <div className="rise space-y-5">
+        <span className="stamp text-[var(--green)]">For students</span>
+        <h1 className="text-5xl leading-[1.05] font-semibold md:text-6xl">
+          Three questions.<br /><em className="text-[var(--green)]">A map of what you know.</em>
+        </h1>
+        <p className="max-w-md text-lg text-stone-600">
+          Each question is picked based on your last answer. At the end you&apos;ll see what you&apos;ve shown you know, what to review, and what&apos;s still a guess.
+        </p>
+      </div>
+      <div className="rise space-y-4 [animation-delay:120ms]">
+        <form className="paper rounded-2xl py-7 pr-7 pl-[4.25rem]" onSubmit={(e) => { e.preventDefault(); if (ready) onJoin(); }}>
+          <h2 className="text-2xl font-semibold">Join your class</h2>
+          <label className="mt-5 block text-sm font-medium text-stone-600">Room code
+            <input className="input serif mt-1 !bg-white/80 text-center !text-4xl tracking-[0.4em] uppercase" maxLength={4} placeholder="ABCD" autoFocus
+              value={code} onChange={(e) => setCode(e.target.value.replace(/[^a-z]/gi, "").toUpperCase())} />
+          </label>
+          {err && <p className="mt-3 text-sm text-red-700">{err}</p>}
+          <button className="btn mt-5 w-full !py-3 text-base" disabled={!ready || busy}>{busy ? "Joining…" : "Join class →"}</button>
+        </form>
+        {rooms.length > 0 && (
+          <div className="card space-y-2">
+            <h2 className="text-lg font-semibold">Your rooms</h2>
+            {rooms.map((r) => (
+              <button key={r.code} disabled={busy} onClick={() => onJoin(r.code)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 px-3 py-2.5 text-left text-sm transition hover:border-[var(--green)] hover:bg-green-50">
+                <span className="font-medium">{r.title}</span>
+                <span className="shrink-0 text-stone-500"><span className="font-mono">{r.code}</span> · {r.answered >= r.total ? "view results" : r.answered ? `resume ${r.answered}/${r.total}` : "start"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyRoom({ title, onRetry }: { title: string; onRetry: () => void }) {
+  return (
+    <div className="paper rise mx-auto max-w-xl rounded-2xl py-10 pr-10 pl-[5rem]">
+      <span className="stamp text-amber-700">Not open yet</span>
+      <h1 className="mt-4 text-3xl font-semibold">{title}</h1>
+      <p className="mt-2 text-stone-600">Your professor hasn&apos;t added any questions to this room yet. Check back soon.</p>
+      <button className="btn-ghost mt-6" onClick={onRetry}>Check again</button>
+    </div>
+  );
+}
+
+function ReadyScreen({ title, name, code, onStart }: { title: string; name: string; code: string; onStart: () => void }) {
+  return (
+    <div className="mx-auto max-w-2xl py-4">
+      <div className="paper rise rounded-2xl py-10 pr-10 pl-[5rem]">
+        <div className="flex items-center justify-between text-sm text-stone-500">
+          <span className="stamp text-[var(--green)]">Diagnostic</span>
+          <span className="font-mono tracking-widest">ROOM {code}</span>
         </div>
-        <h1 className="text-2xl font-bold leading-snug">{next.question.text}</h1>
-        <div className="space-y-2">
-          {next.question.options.map((o, i) => (
-            <button key={i} className="flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white p-4 text-left transition hover:border-[#00693e] hover:bg-green-50" onClick={() => answer(next.question, i)}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-100 text-sm font-semibold">{"ABCD"[i]}</span>{o}
+        <p className="serif mt-8 text-lg text-stone-500 italic">Ready when you are{name ? `, ${name.split(" ")[0]}` : ""}.</p>
+        <h1 className="ink mt-1 text-4xl leading-tight font-semibold md:text-5xl">{title || "Today's lesson"}</h1>
+        <ul className="mt-8 grid gap-4 sm:grid-cols-3">
+          {[
+            ["3", "questions, one at a time"],
+            ["~2", "minutes, no time limit"],
+            ["0", "grades. This only guides what to review"],
+          ].map(([n, t], i) => (
+            <li key={t} className="rise" style={{ animationDelay: `${200 + i * 90}ms` }}>
+              <span className="serif block text-5xl font-semibold text-[var(--green)]">{n}</span>
+              <span className="text-sm text-stone-600">{t}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-8 text-sm text-stone-500">Your second and third questions depend on how you answer, so a classmate may get different ones.</p>
+        <button className="btn mt-6 !px-8 !py-3.5 text-base" onClick={onStart} autoFocus>Take the quiz →</button>
+      </div>
+    </div>
+  );
+}
+
+function QuizScreen({ q, progress, sid, code, onAnswered }: { q: Q; progress: Progress; sid: string; code: string; onAnswered: () => Promise<unknown> }) {
+  const [pick, setPick] = useState<number | null>(null);
+  const [sending, setSending] = useState(false);
+  const order = useMemo(() => shuffledOrder(q.options.length, sid + q.id), [q, sid]);
+  const n = progress.answered + 1;
+
+  async function submit() {
+    if (pick === null || sending) return;
+    setSending(true);
+    await fetch(`/api/rooms/${code}/answer`, { method: "POST", body: JSON.stringify({ studentId: sid, questionId: q.id, choice: pick }) });
+    await onAnswered();
+  }
+
+  // Keyboard: A–D or 1–4 to choose, Enter to submit.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const slot = "abcd".indexOf(e.key.toLowerCase()) >= 0 ? "abcd".indexOf(e.key.toLowerCase()) : "1234".indexOf(e.key);
+      if (slot >= 0 && slot < order.length) setPick(order[slot]);
+      if (e.key === "Enter") submit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // re-bind each render so submit sees the current pick
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-6 flex items-center gap-3">
+        {Array.from({ length: progress.total }, (_, i) => (
+          <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${i < progress.answered ? "bg-[var(--green)]" : i === progress.answered ? "bg-[var(--green)]/40" : "bg-stone-200"}`} />
+        ))}
+        <span className="shrink-0 font-mono text-xs text-stone-500">{n}/{progress.total}</span>
+      </div>
+      <div className="paper rise relative rounded-2xl py-8 pr-8 pl-[5rem]">
+        <span className="serif absolute top-6 left-0 w-[3.25rem] text-center text-4xl font-semibold text-[var(--margin)]">{n}</span>
+        {n > 1 && <p className="serif mb-2 text-sm text-stone-500 italic">Chosen for you, based on your last answer</p>}
+        <h1 className="text-2xl leading-snug font-semibold md:text-3xl">{q.text}</h1>
+        <div className="mt-7 space-y-2.5" role="radiogroup" aria-label="Answer options">
+          {order.map((i, slot) => (
+            <button key={i} role="radio" aria-checked={pick === i} onClick={() => setPick(i)} disabled={sending}
+              className={`option flex w-full items-center gap-4 rounded-xl border bg-white/85 p-4 text-left ${pick === i ? "border-[var(--green)] bg-green-50/80" : "border-stone-300 hover:border-stone-400"}`}>
+              <span className={`serif flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition ${pick === i ? "border-[var(--green)] bg-[var(--green)] text-white" : "border-stone-300 text-stone-600"}`}>{"ABCD"[slot]}</span>
+              <span className="flex-1">{q.options[i]}</span>
             </button>
           ))}
         </div>
+        <div className="mt-7 flex items-center justify-between gap-4">
+          <p className="hidden text-xs text-stone-400 sm:block">Tip: press A–D, then Enter</p>
+          <button className="btn !px-7 !py-3 text-base" disabled={pick === null || sending} onClick={submit}>
+            {sending ? "Saving…" : n < progress.total ? "Submit answer →" : "Submit & see results →"}
+          </button>
+        </div>
       </div>
-    );
-  if (!("done" in next)) return <p className="text-stone-500">Loading…</p>;
+    </div>
+  );
+}
+
+const SUMMARY: { labels: Label[]; title: string; tone: string }[] = [
+  { labels: ["strength"], title: "Shown you know", tone: "border-green-300 bg-green-50 text-green-900" },
+  { labels: ["review", "mixed"], title: "To review", tone: "border-red-300 bg-red-50 text-red-900" },
+  { labels: ["tentative-up", "tentative-down"], title: "Educated guesses", tone: "border-dashed border-stone-400 bg-white text-stone-800" },
+  { labels: ["unknown"], title: "No evidence yet", tone: "border-stone-200 bg-stone-50 text-stone-600" },
+];
+
+function Results({ data, name, title, code, sid }: { data: Extract<Next, { done: true }>; name: string; title: string; code: string; sid: string }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [practice, setPractice] = useState<{ id: string; name: string } | null>(null);
+  const [ask, setAsk] = useState<{ text: string; n: number } | null>(null);
+  const toReview = data.diagnostic.filter((d) => d.label === "review" || d.label === "mixed");
+  const practiceFirst = toReview[0] ?? data.diagnostic.find((d) => d.label === "tentative-down") ?? data.diagnostic.find((d) => d.label === "unknown");
+  const sel = data.diagnostic.find((d) => d.conceptId === selected);
+  const right = data.answered.filter((a) => a.correct).length;
+  const askHelper = (text: string) => setAsk((a) => ({ text, n: (a?.n ?? 0) + 1 }));
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Your preliminary diagnostic</h1>
-        <p className="mt-1 max-w-2xl text-stone-600">Based on only {next.progress.total} questions. Pale blue or orange concepts are inferred from related answers, not answered directly. Grey means not enough evidence.</p>
+      <header className="rise flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <p className="serif text-lg text-stone-500 italic">{title}</p>
+          <h1 className="text-4xl font-semibold md:text-5xl">{name ? `Your map, ${name.split(" ")[0]}` : "Your map"}</h1>
+          <p className="mt-2 max-w-2xl text-stone-600">
+            You got <strong>{right} of {data.answered.length}</strong> right. That&apos;s only {data.answered.length} questions, so treat this as a starting point, not a verdict.
+          </p>
+        </div>
+        {practiceFirst && (
+          <button className="btn !px-6 !py-3" onClick={() => { setPractice({ id: practiceFirst.conceptId, name: practiceFirst.name }); setSelected(practiceFirst.conceptId); }}>
+            Practice {practiceFirst.name} →
+          </button>
+        )}
+      </header>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {SUMMARY.map((s, i) => {
+          const items = data.diagnostic.filter((d) => s.labels.includes(d.label));
+          return (
+            <div key={s.title} className={`rise rounded-2xl border p-4 ${s.tone}`} style={{ animationDelay: `${80 + i * 70}ms` }}>
+              <p className="serif text-4xl font-semibold">{items.length}</p>
+              <p className="text-sm font-semibold">{s.title}</p>
+              <p className="mt-1 line-clamp-2 text-xs opacity-75">{items.map((d) => d.name).join(", ") || "None"}</p>
+            </div>
+          );
+        })}
       </div>
-      <Graph nodes={next.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, fill: LABEL_FILL[d.label], accent: LABEL_ACCENT[d.label] }))} edges={next.edges} />
-      <div className="flex flex-wrap gap-2 text-xs">
-        {(Object.keys(LABEL_FILL) as Label[]).map((l) => <span key={l} className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1"><i className="h-3 w-3 rounded-full border" style={{ background: LABEL_FILL[l] }} />{LABEL_TEXT[l]}</span>)}
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-6">
+          <section className="card rise space-y-4 [animation-delay:200ms]">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-2xl font-semibold">Concept map</h2>
+              <p className="text-sm text-stone-500">Click a concept to explore it. Pale blue and orange concepts are guesses, not tested.</p>
+            </div>
+            <Graph
+              nodes={data.diagnostic.map((d) => ({ id: d.conceptId, name: (d.foundational ? "★ " : "") + d.name, fill: LABEL_FILL[d.label], accent: LABEL_ACCENT[d.label] }))}
+              edges={data.edges}
+              layout={data.layout}
+              selected={selected}
+              onSelect={(id) => setSelected(id)}
+            />
+            <div className="flex flex-wrap gap-2 text-xs">
+              {(Object.keys(LABEL_FILL) as Label[]).map((l) => (
+                <span key={l} className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1">
+                  <i className="h-3 w-3 rounded-full border-2" style={{ background: LABEL_FILL[l], borderColor: LABEL_ACCENT[l] }} />{LABEL_TEXT[l]}
+                </span>
+              ))}
+            </div>
+            {sel ? (
+              <div key={sel.conceptId} className="rise rounded-xl border border-stone-200 bg-stone-50 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h3 className="text-xl font-semibold">{sel.name}</h3>
+                  <span className="rounded-full border px-2.5 py-0.5 text-xs font-semibold" style={{ background: LABEL_FILL[sel.label] }}>{LABEL_TEXT[sel.label]}</span>
+                </div>
+                {sel.description && <p className="mt-1 text-sm text-stone-700">{sel.description}</p>}
+                <p className="mt-2 text-sm text-stone-500">{LABEL_NOTE[sel.label]}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button className="btn" onClick={() => askHelper(`Explain ${sel.name} to me, starting from what I got wrong if anything.`)}>Explain this</button>
+                  <button className="btn-ghost" onClick={() => setPractice({ id: sel.conceptId, name: sel.name })}>Practice this</button>
+                </div>
+              </div>
+            ) : (
+              <p className="serif rounded-xl border border-dashed border-stone-300 p-4 text-center text-stone-500 italic">Pick a concept on the map to see what it means for you.</p>
+            )}
+          </section>
+
+          {practice && <Practice key={practice.id} code={code} studentId={sid} concept={practice} onClose={() => setPractice(null)} />}
+
+          <section className="space-y-3">
+            <h2 className="text-2xl font-semibold">Your answers</h2>
+            {data.answered.map((a, i) => <AnswerCard key={a.questionId} a={a} n={i + 1} code={code} sid={sid} onAsk={askHelper} />)}
+          </section>
+        </div>
+
+        <div className="lg:sticky lg:top-6">
+          <StudyChat code={code} studentId={sid} reviewConcepts={toReview.map((d) => d.name)} ask={ask} />
+        </div>
       </div>
-      <div className="space-y-3">
-        <h2 className="text-xl font-bold">Your answers</h2>
-        {next.answered.map((a) => (
-          <div key={a.questionId} className="card space-y-1 text-sm">
-            <p className="font-semibold">{a.text}</p>
-            <p className={a.correct ? "text-green-700" : "text-red-700"}>You answered: {a.options[a.choice]} {a.correct ? "✓" : `✗ — correct: ${a.options[a.correctAnswer]}`}</p>
-            {a.explanation && <p className="text-stone-500">{a.explanation}</p>}
-            <button className="text-[#00693e] underline disabled:text-stone-400 disabled:no-underline" disabled={challenged[a.questionId]} onClick={() => challenge(a.questionId)}>
-              {challenged[a.questionId] ? "Challenge sent to your professor" : "I disagree with this assessment"}
-            </button>
+    </div>
+  );
+}
+
+function AnswerCard({ a, n, code, sid, onAsk }: { a: Answered; n: number; code: string; sid: string; onAsk: (t: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [sent, setSent] = useState(false);
+
+  async function challenge() {
+    const r = await fetch(`/api/rooms/${code}/challenge`, { method: "POST", body: JSON.stringify({ studentId: sid, questionId: a.questionId, reason }) });
+    if (r.ok) { setSent(true); setOpen(false); }
+  }
+
+  return (
+    <div className={`card relative overflow-hidden border-l-4 !pl-6 ${a.correct ? "border-l-green-500" : "border-l-red-400"}`}>
+      <div className="flex items-start gap-3">
+        <span className="serif text-2xl font-semibold text-stone-300">{n}</span>
+        <div className="flex-1 space-y-1.5 text-sm">
+          <p className="text-base font-semibold">{a.text}</p>
+          <p className={a.correct ? "text-green-800" : "text-red-800"}>
+            {a.correct ? "✓ " : "✗ "}You answered: {a.options[a.choice]}
+          </p>
+          {!a.correct && <p className="text-stone-700">Correct answer: <strong>{a.options[a.correctAnswer]}</strong></p>}
+          {a.explanation && <p className="text-stone-500">{a.explanation}</p>}
+          <div className="flex flex-wrap gap-4 pt-1">
+            {!a.correct && <button className="font-medium text-[var(--green)] hover:underline" onClick={() => onAsk(`Why is "${a.options[a.correctAnswer]}" the answer to "${a.text}", and why was "${a.options[a.choice]}" wrong?`)}>Ask the helper why</button>}
+            {sent ? (
+              <span className="text-amber-700">Sent to your professor for review</span>
+            ) : (
+              <button className="text-stone-500 hover:text-stone-800 hover:underline" onClick={() => setOpen((o) => !o)}>I disagree with this assessment</button>
+            )}
           </div>
-        ))}
+          {open && (
+            <div className="rise space-y-2 pt-2">
+              <textarea className="input" rows={2} maxLength={500} autoFocus placeholder="What was unclear or unfair about this question?" value={reason} onChange={(e) => setReason(e.target.value)} />
+              <div className="flex gap-2">
+                <button className="btn" disabled={!reason.trim()} onClick={challenge}>Send to professor</button>
+                <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

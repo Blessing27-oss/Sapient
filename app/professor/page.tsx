@@ -7,9 +7,9 @@ import QuestionList from "@/components/QuestionList";
 import ShareCard from "@/components/ShareCard";
 import { questionProblems } from "@/lib/questions";
 import { PALETTE } from "@/lib/ui";
-import type { Concept, Edge, Question } from "@/lib/types";
+import type { Concept, Edge, MapLayout, Question } from "@/lib/types";
 
-type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; note?: string };
+type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; note?: string; layout?: MapLayout };
 
 // Removing a concept also removes its connections and detaches it from questions (a question left with no concept is dropped).
 const dropConcept = (d: Draft, id: string): Draft => ({
@@ -177,6 +177,8 @@ function Workspace() {
             <Graph
               nodes={draft.concepts.map((c, i) => ({ id: c.id, name: (c.foundational ? "★ " : "") + c.name, editName: c.name, fill: PALETTE[i % PALETTE.length].fill, accent: PALETTE[i % PALETTE.length].accent, flag: c.verified ? undefined : "#f59e0b" }))}
               solidRoot
+              layout={draft.layout}
+              onLayoutChange={(layout) => setDraft((d) => d && { ...d, layout })}
               edges={draft.edges}
               selected={sel}
               onSelect={(id) => { setSel(id); if (id) setSelEdge(null); }}
