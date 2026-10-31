@@ -1,13 +1,14 @@
 "use client";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Graph from "@/components/Graph";
+import TopicMapView from "@/components/TopicMapView";
+import { fallbackTopicMap } from "@/lib/topicMap";
 import Practice from "@/components/Practice";
 import { StudentGate } from "@/components/ProfessorGate";
 import StudyChat from "@/components/StudyChat";
 import { LABEL_TEXT } from "@/lib/engine";
 import { LABEL_ACCENT, LABEL_FILL } from "@/lib/ui";
-import type { Label, MapLayout } from "@/lib/types";
+import type { Edge, Label, MapLayout, TopicMap } from "@/lib/types";
 
 type Q = { id: string; text: string; options: string[] };
 type Progress = { answered: number; total: number };
@@ -16,7 +17,7 @@ type Answered = { questionId: string; text: string; correct: boolean; choice: nu
 type Next =
   | { question: Q; progress: Progress }
   | { noQuestions: true; title: string }
-  | { done: true; progress: Progress; edges: { source: string; target: string; weight: number }[]; layout?: MapLayout; diagnostic: Diag[]; answered: Answered[] };
+  | { done: true; progress: Progress; title: string; topicMap?: TopicMap; edges: Edge[]; layout?: MapLayout; diagnostic: Diag[]; answered: Answered[] };
 type MyRoom = { code: string; title: string; answered: number; total: number };
 
 const LABEL_NOTE: Record<Label, string> = {
@@ -288,13 +289,13 @@ function Results({ data, name, title, code, sid }: { data: Extract<Next, { done:
               <h2 className="text-2xl font-semibold">Concept map</h2>
               <p className="text-sm text-stone-500">Click a concept to explore it. Pale blue and orange concepts are guesses, not tested.</p>
             </div>
-            <Graph
-              nodes={data.diagnostic.map((d) => ({ id: d.conceptId, name: (d.foundational ? "★ " : "") + d.name, fill: LABEL_FILL[d.label], accent: LABEL_ACCENT[d.label] }))}
-              edges={data.edges}
-              layout={data.layout}
-              selected={selected}
-              onSelect={(id) => setSelected(id)}
-            />
+            <TopicMapView title={data.title || title}
+              map={data.topicMap ?? fallbackTopicMap(data.diagnostic.map((d) => ({ id: d.conceptId, name: d.name, importance: 1, verified: true })), data.edges)}
+              selectedConceptId={selected} onSelectConcept={setSelected}
+              styleFor={(node) => {
+                const diagnostic = data.diagnostic.find((d) => d.conceptId === node.conceptId);
+                return diagnostic ? { fill: LABEL_FILL[diagnostic.label], stroke: LABEL_ACCENT[diagnostic.label], dashed: diagnostic.label.startsWith("tentative") } : { fill: "#fafaf9", stroke: "#d6d3d1" };
+              }} />
             <div className="flex flex-wrap gap-2 text-xs">
               {(Object.keys(LABEL_FILL) as Label[]).map((l) => (
                 <span key={l} className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1">

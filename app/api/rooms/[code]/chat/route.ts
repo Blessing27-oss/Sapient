@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { requireStudent } from "@/lib/auth";
+import { getRoomSources, retrieveSourceChunks } from "@/lib/sources";
 import { getRoom } from "@/lib/store";
 import { buildTutorSystemPrompt, diagnosticFinished, validateChatMessages } from "@/lib/tutor";
 
@@ -19,6 +20,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const checked = validateChatMessages(body.messages);
   if ("error" in checked) return Response.json({ error: checked.error }, { status: 400 });
 
+  const excerpts = retrieveSourceChunks(await getRoomSources(room, auth.user), checked.messages.at(-1)!.content);
   const client = new Anthropic();
   const stream = client.beta.messages.stream({
     model: "claude-opus-5-5",
@@ -28,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     // Chat is latency-sensitive and doesn't need deep reasoning.
     output_config: { effort: "low" },
     cache_control: { type: "ephemeral" },
-    system: buildTutorSystemPrompt(room, student),
+    system: buildTutorSystemPrompt(room, student, excerpts),
     messages: checked.messages,
   });
 

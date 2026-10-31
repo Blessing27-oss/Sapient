@@ -1,15 +1,16 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
-import Graph from "@/components/Graph";
+import TopicMapView from "@/components/TopicMapView";
+import { fallbackTopicMap } from "@/lib/topicMap";
 import ProfessorGate from "@/components/ProfessorGate";
 import QuestionList from "@/components/QuestionList";
 import { BarRows, Panel, StatTile, type BarRow } from "@/components/charts";
 import ShareCard from "@/components/ShareCard";
 import { isLive } from "@/lib/questions";
-import type { Concept, Insight, Label, MapLayout, Question } from "@/lib/types";
+import type { Concept, Edge, Insight, Label, Question, TopicMap } from "@/lib/types";
 
 type Dash = {
-  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; layout?: MapLayout; questions: Question[] };
+  room: { code: string; title: string; concepts: Concept[]; edges: Edge[]; topicMap?: TopicMap; questions: Question[] };
   answeredQuestionIds: string[];
   students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
@@ -172,12 +173,13 @@ function Dashboard({ code }: { code: string }) {
             </Panel>
           </div>
 
-          <Panel title="Concept map" subtitle="Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet.">
-            <Graph
-              nodes={d.classRows.map((r) => ({ id: r.conceptId, name: (d.room.concepts.find((c) => c.id === r.conceptId)?.foundational ? "★ " : "") + r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
-              edges={d.room.edges}
-              layout={d.room.layout}
-            />
+          <Panel title="Lecture topic map" subtitle="Assessed concepts coloured from direct answers. Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet · pale with a light border: lecture context, not assessed.">
+            <TopicMapView title={d.room.title} map={d.room.topicMap ?? fallbackTopicMap(d.room.concepts, d.room.edges)}
+              styleFor={(node) => {
+                const row = d.classRows.find((r) => r.conceptId === node.conceptId);
+                if (!row) return { fill: "#fafaf9", stroke: "#d6d3d1" };
+                return { fill: row.asked === 0 ? "#f5f5f4" : row.flag ? "#fca5a5" : row.missed > 0 ? "#fde68a" : "#86efac", stroke: "#78716c" };
+              }} />
           </Panel>
 
           <div className="grid gap-6 lg:grid-cols-2">
