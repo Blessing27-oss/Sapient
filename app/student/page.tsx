@@ -243,6 +243,7 @@ const SUMMARY: { labels: Label[]; title: string; tone: string }[] = [
 ];
 
 function Results({ data, name, title, code, sid }: { data: Extract<Next, { done: true }>; name: string; title: string; code: string; sid: string }) {
+  const [chatOpen, setChatOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [practice, setPractice] = useState<{ id: string; name: string } | null>(null);
   const [ask, setAsk] = useState<{ text: string; n: number } | null>(null);
@@ -282,7 +283,7 @@ function Results({ data, name, title, code, sid }: { data: Extract<Next, { done:
         })}
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className={`grid items-start gap-6 ${chatOpen ? "lg:grid-cols-[minmax(0,1fr)_380px]" : "grid-cols-1"}`}>
         <div className="min-w-0 space-y-6">
           <section className="card rise space-y-4 [animation-delay:200ms]">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -329,8 +330,8 @@ function Results({ data, name, title, code, sid }: { data: Extract<Next, { done:
           </section>
         </div>
 
-        <div className="lg:sticky lg:top-6">
-          <StudyChat code={code} studentId={sid} reviewConcepts={toReview.map((d) => d.name)} ask={ask} />
+        <div className={chatOpen ? "lg:sticky lg:top-6" : "contents"}>
+          <StudyChat code={code} studentId={sid} reviewConcepts={toReview.map((d) => d.name)} ask={ask} collapsed={!chatOpen} onCollapsedChange={(collapsed) => setChatOpen(!collapsed)} />
         </div>
       </div>
     </div>
