@@ -28,7 +28,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ code: stri
       reasons: g.items.map((i) => ({ student: room.students.find((s) => s.id === i.studentId)?.name ?? "?", reason: i.reason })),
     }));
   return Response.json({
-    room: { code: room.code, title: room.title, concepts: room.concepts, edges: room.edges, questions: room.questions },
+    room: { code: room.code, title: room.title, concepts: room.concepts, edges: room.edges, layout: room.layout, questions: room.questions },
     answeredQuestionIds: [...new Set(room.students.flatMap((s) => s.responses.map((r) => r.questionId)))],
     students, classRows: classDiagnostic(room), challengeGroups, insights: room.insights,
   });

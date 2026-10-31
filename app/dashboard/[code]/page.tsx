@@ -5,10 +5,10 @@ import ProfessorGate from "@/components/ProfessorGate";
 import QuestionList from "@/components/QuestionList";
 import ShareCard from "@/components/ShareCard";
 import { isLive } from "@/lib/questions";
-import type { Concept, Insight, Label, Question } from "@/lib/types";
+import type { Concept, Insight, Label, MapLayout, Question } from "@/lib/types";
 
 type Dash = {
-  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
+  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; layout?: MapLayout; questions: Question[] };
   answeredQuestionIds: string[];
   students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
@@ -80,8 +80,9 @@ function Dashboard({ code }: { code: string }) {
       <section className="space-y-2">
         <h2 className="text-xl font-bold">Class concept map</h2>
         <Graph
-          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
+          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: (d.room.concepts.find((c) => c.id === r.conceptId)?.foundational ? "★ " : "") + r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac", accent: r.asked === 0 ? "#a8a29e" : r.flag ? "#dc2626" : r.missed > 0 ? "#d97706" : "#16a34a" }))}
           edges={d.room.edges}
+          layout={d.room.layout}
         />
         <p className="text-xs text-stone-500">Red: at least half of students who directly answered missed it · Amber: some missed · Green: none missed · Grey: no direct answers yet.</p>
       </section>
