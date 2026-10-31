@@ -8,7 +8,7 @@ import type { Concept, Insight, Label, Question } from "@/lib/types";
 
 type Dash = {
   room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
-  students: { id: string; name: string; answered: number; path: { questionId: string; correct: boolean }[]; concepts: { conceptId: string; label: Label }[] }[];
+  students: { id: string; name: string; answered: number; done: boolean; path: { questionId: string; correct: boolean; invalidated: boolean; revised: boolean }[]; concepts: { conceptId: string; label: Label; directCount: number; correctCount: number; inferred: number }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
   challengeGroups: { question: Question; reasons: { student: string; reason: string }[] }[];
   insights: Insight[];
@@ -26,16 +26,35 @@ function Dashboard({ code }: { code: string }) {
   const [d, setD] = useState<Dash | null>(null);
   const [editing, setEditing] = useState<Question | null>(null);
 
-  const load = useCallback(async () => setD(await (await fetch(`/api/rooms/${code}/dashboard`)).json()), [code]);
+  const [error, setError] = useState("");
+  const [revisionMode, setRevisionMode] = useState<"regrade" | "reset">("regrade");
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${code}/dashboard`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not load dashboard.");
+      setD(data);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load dashboard."); }
+  }, [code]);
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t); }, [load]);
 
-  const post = async (path: string, body: unknown) => { await fetch(`/api/rooms/${code}/${path}`, { method: "POST", body: JSON.stringify(body) }); load(); };
-  if (!d) return <p>Loading…</p>;
+  const post = async (path: string, body: unknown) => {
+    setError("");
+    try {
+      const response = await fetch(`/api/rooms/${code}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not save changes.");
+      await load();
+      return true;
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save changes."); return false; }
+  };
+  if (!d) return <p>{error || "Loading…"}</p>;
   const qText = (id: string) => d.room.questions.find((q) => q.id === id)?.text ?? id;
   const insight = (id: string) => d.insights.find((i) => i.conceptId === id);
 
   return (
     <div className="space-y-8">
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       <div>
         <h1 className="text-3xl font-bold">{d.room.title}</h1>
         <p className="text-stone-500">{d.students.length} student{d.students.length === 1 ? "" : "s"} joined · updates live</p>
@@ -59,7 +78,7 @@ function Dashboard({ code }: { code: string }) {
               <p className="font-medium">{g.reasons.length} student{g.reasons.length > 1 ? "s" : ""} challenged: “{g.question.text}” — review recommended.</p>
               <ul className="list-disc pl-5 text-sm text-slate-600">{g.reasons.map((r, i) => <li key={i}><b>{r.student}:</b> {r.reason}</li>)}</ul>
               <div className="flex gap-2">
-                <button className="btn-ghost" onClick={() => setEditing(g.question)}>Edit &amp; reset responses</button>
+                <button className="btn-ghost" onClick={() => setEditing(g.question)}>Revise question</button>
                 <button className="btn-ghost" onClick={() => post("resolve", { questionId: g.question.id, action: "invalidate" })}>Invalidate for everyone</button>
                 <button className="btn-ghost" onClick={() => post("resolve", { questionId: g.question.id, action: "dismiss" })}>Dismiss</button>
               </div>
@@ -70,7 +89,14 @@ function Dashboard({ code }: { code: string }) {
 
       {editing && (
         <div className="card space-y-2 border-indigo-400">
-          <h3 className="font-semibold">Revise question (previous responses to it will be cleared)</h3>
+          <h3 className="font-semibold">Revise question</h3>
+          <label className="block text-sm">Existing answers
+            <select className="input" value={revisionMode} onChange={(e) => setRevisionMode(e.target.value as "regrade" | "reset")}>
+              <option value="regrade">Keep choices and re-grade</option>
+              <option value="reset">Clear answers so students can answer again</option>
+            </select>
+          </label>
+          <p className="text-xs text-stone-500">{revisionMode === "regrade" ? "Use for answer-key corrections. Keep each option in its original position; saved choices are re-graded everywhere." : "Use when changing the meaning of a question or its options. Students will answer it again."}</p>
           <textarea className="input" value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })} />
           {editing.options.map((o, i) => (
             <div key={i} className="flex gap-2">
@@ -79,11 +105,19 @@ function Dashboard({ code }: { code: string }) {
             </div>
           ))}
           <div className="flex gap-2">
-            <button className="btn" onClick={() => { post("resolve", { questionId: editing.id, action: "revise", patch: editing }); setEditing(null); }}>Save revision</button>
+            <button className="btn" onClick={async () => { if (await post("resolve", { questionId: editing.id, action: "revise", patch: editing, mode: revisionMode })) setEditing(null); }}>Save revision</button>
             <button className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
           </div>
         </div>
       )}
+
+      <section className="space-y-3">
+        <h2 className="text-xl font-bold">Questions</h2>
+        {d.room.questions.map((q, i) => <div key={q.id} className="card flex items-center justify-between gap-3 text-sm">
+          <span className={q.invalidated ? "text-stone-400 line-through" : ""}>Q{i + 1}: {q.text}{q.sourcePage ? ` · p.${q.sourcePage}` : ""}{q.invalidated ? " (invalidated)" : ""}</span>
+          <button className="btn-ghost" onClick={() => setEditing(q)}>Revise</button>
+        </div>)}
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-bold">Class diagnostic</h2>
@@ -116,15 +150,16 @@ function Dashboard({ code }: { code: string }) {
         <div className="flex flex-wrap gap-3 text-xs">
           {(Object.keys(DOT) as Label[]).map((l) => <span key={l} className="flex items-center gap-1"><i className={`inline-block h-3 w-3 rounded-full ${DOT[l]}`} />{LABEL_TEXT[l]}</span>)}
         </div>
+        <p className="text-xs text-stone-500">Cells show correct / direct answers. Dashed ~ cells are inferred only; — means unknown. Crossed-out path entries are invalidated and excluded from the question budget.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead><tr><th className="p-1">Student</th><th className="p-1">Path</th>{d.room.concepts.map((c) => <th key={c.id} className="p-1 text-xs font-normal [writing-mode:vertical-rl]">{c.name}</th>)}</tr></thead>
             <tbody>
               {d.students.map((s) => (
                 <tr key={s.id} className="border-t">
-                  <td className="p-1">{s.name}</td>
-                  <td className="p-1 text-xs">{s.path.map((p) => <span key={p.questionId} title={qText(p.questionId)} className={p.correct ? "text-green-700" : "text-red-700"}>{p.questionId.toUpperCase()}{p.correct ? "✓" : "✗"} </span>)}</td>
-                  {s.concepts.map((c) => <td key={c.conceptId} className="p-1"><i title={LABEL_TEXT[c.label]} className={`inline-block h-4 w-4 rounded-full ${DOT[c.label]}`} /></td>)}
+                  <td className="p-1 whitespace-nowrap">{s.name}<span className="ml-1 text-xs text-stone-400">{s.done ? "(complete)" : `(${s.answered}/3)`}</span></td>
+                  <td className="p-1 text-xs">{s.path.map((p) => <span key={p.questionId} title={`${qText(p.questionId)}${p.invalidated ? " (invalidated, excluded)" : p.revised ? " (revised)" : ""}`} className={`mr-1 inline-block rounded px-1.5 py-0.5 ${p.invalidated ? "bg-stone-100 text-stone-400 line-through" : p.correct ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>Q{d.room.questions.findIndex((q) => q.id === p.questionId) + 1}{p.invalidated ? "" : p.correct ? " ✓" : " ✗"} </span>)}</td>
+                  {s.concepts.map((c) => <td key={c.conceptId} className="p-1"><div title={`${LABEL_TEXT[c.label]} · direct ${c.correctCount}/${c.directCount} · inferred ${c.inferred.toFixed(2)}`} className={`min-w-12 rounded border px-1 py-2 text-center text-xs ${DOT[c.label]} ${c.directCount === 0 && c.label !== "unknown" ? "border-dashed border-stone-500" : "border-transparent"}`}>{c.directCount > 0 ? `${c.correctCount}/${c.directCount}` : c.label === "unknown" ? "—" : "~"}</div></td>)}
                 </tr>
               ))}
             </tbody>

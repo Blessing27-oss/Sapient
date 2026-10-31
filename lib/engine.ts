@@ -11,18 +11,23 @@ export function emptyState(concepts: Concept[]): KnowledgeState {
 // One-hop, undirected propagation. Edges mean "possibly relevant", not "mastery implies mastery".
 export function updateKnowledge(question: Question, correct: boolean, state: KnowledgeState, edges: Edge[]): KnowledgeState {
   const signal = correct ? 1 : -1;
-  for (const id of question.conceptIds) {
+  const tagged = new Set(question.conceptIds.filter((id) => state[id]));
+  const neighbors = new Map<string, number>();
+  for (const id of tagged) {
     const st = state[id];
-    if (!st) continue;
     st.direct += signal;
     st.directCount += 1;
     if (correct) st.correctCount += 1;
     else st.wrongCount += 1;
-    for (const e of edges) {
-      const n = e.source === id ? e.target : e.target === id ? e.source : null;
-      if (n && state[n] && !question.conceptIds.includes(n)) state[n].inferred += signal * e.weight;
+  }
+  for (const edge of edges) {
+    for (const [from, to] of [[edge.source, edge.target], [edge.target, edge.source]]) {
+      if (tagged.has(from) && !tagged.has(to) && state[to]) {
+        neighbors.set(to, Math.max(neighbors.get(to) ?? 0, edge.weight));
+      }
     }
   }
+  for (const [id, weight] of neighbors) state[id].inferred += signal * weight;
   return state;
 }
 
@@ -32,9 +37,14 @@ export function computeState(room: Pick<Room, "concepts" | "edges" | "questions"
   for (const r of responses) {
     const q = room.questions.find((x) => x.id === r.questionId);
     if (!q || q.invalidated) continue;
-    updateKnowledge(q, r.correct, state, room.edges);
+    updateKnowledge(q, gradeResponse(q, r), state, room.edges);
   }
   return state;
+}
+
+// Stored choices remain authoritative when the professor changes an answer key.
+export function gradeResponse(question: Question, response: Pick<Response, "choice">): boolean {
+  return response.choice === question.correctAnswer;
 }
 
 export function validResponses(room: Pick<Room, "questions">, student: Student): Response[] {

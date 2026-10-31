@@ -1,26 +1,28 @@
 import { requireProfessor } from "@/lib/auth";
 import { withDB } from "@/lib/store";
-import type { Question } from "@/lib/types";
+import { reviseQuestion } from "@/lib/moderate";
+import type { QuestionPatch, RevisionMode } from "@/lib/moderate";
 
-// invalidate: question removed for everyone, its evidence disappears (states are recomputed on read).
-// revise: question rewritten and earlier responses to it are cleared so students can re-answer.
-// dismiss: keep the question as is.
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const deny = await requireProfessor();
   if (deny) return deny;
   const { code } = await params;
-  const { questionId, action, patch } = (await req.json()) as { questionId: string; action: "invalidate" | "revise" | "dismiss"; patch?: Partial<Question> };
-  const ok = await withDB((db) => {
+  const { questionId, action, patch, mode = "reset" } = (await req.json()) as {
+    questionId: string; action: "invalidate" | "revise" | "dismiss"; patch?: QuestionPatch; mode?: RevisionMode;
+  };
+  if (!["invalidate", "revise", "dismiss"].includes(action)) return Response.json({ error: "Unknown action" }, { status: 400 });
+  const result = await withDB((db) => {
     const room = db[code.toUpperCase()];
     const q = room?.questions.find((x) => x.id === questionId);
-    if (!room || !q) return false;
-    if (action === "invalidate") q.invalidated = true;
-    if (action === "revise" && patch) {
-      Object.assign(q, { text: patch.text ?? q.text, options: patch.options ?? q.options, correctAnswer: patch.correctAnswer ?? q.correctAnswer, invalidated: false });
-      for (const s of room.students) s.responses = s.responses.filter((r) => r.questionId !== questionId);
+    if (!room || !q) return { error: "Not found", status: 404 };
+    if (action === "revise") {
+      if (!patch) return { error: "Provide a revision", status: 400 };
+      const error = reviseQuestion(room, q, patch, mode);
+      if (error) return { error, status: 400 };
     }
+    if (action === "invalidate") q.invalidated = true;
     for (const c of room.challenges) if (c.questionId === questionId) c.status = "resolved";
-    return true;
+    return { ok: true };
   });
-  return ok ? Response.json({ ok }) : Response.json({ error: "Not found" }, { status: 404 });
+  return "error" in result ? Response.json({ error: result.error }, { status: result.status }) : Response.json(result);
 }

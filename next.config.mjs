@@ -1,2 +1,3 @@
-/** @type {import('next').NextConfig} */
-export default { serverExternalPackages: ["pdf-parse"] };
+/** @type {import("next").NextConfig} */
+const config = {};
+export default config;

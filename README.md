@@ -5,8 +5,7 @@ Find what students don't know, before the exam. A professor-controlled adaptive 
     npm install && npm run dev      # http://localhost:3000
     npm test                        # engine tests
 
-Optional: `ANTHROPIC_API_KEY=...` enables PDF -> concepts/questions extraction. Without it (or if the PDF
-fails) the built-in Fourier sample lesson loads, so the demo always works.
+Optional: `ANTHROPIC_API_KEY=...` enables PDF -> concepts/questions extraction. Use the sample Fourier lesson without a key. PDF generation reports errors explicitly and never silently substitutes sample content. PDF text is extracted page by page, so source citations retain the original page numbers.
 
 Professor access: only `mitchelle.k.ngare.27@dartmouth.edu` (`lib/auth.ts`). Set `GOOGLE_CLIENT_ID` (a Google
 OAuth web client with your origin authorised) for real Google sign-in, verified server-side. Also set
@@ -24,3 +23,10 @@ Design notes
   would get the same sequence. We adjust by evidence (probe suspected gaps/conflicts, deprioritise
   plausible-by-inference concepts). Weights are illustrative, not validated.
 - Not demonstrated: that 3 questions accurately recover a knowledge state. That needs a fixed-quiz comparison.
+
+- Generation (`lib/extract.ts`): structured-output generation with server-side fallback; generated concepts and questions require professor review. Source pages outside the document are omitted.
+- Evidence spread: directly tested concepts count once per answer. Each untested neighbor receives only the strongest connecting edge weight, once per answer and one hop only.
+- Revisions: choose **Keep choices and re-grade** for answer-key corrections (option positions must remain the same), or **Clear answers** when rewriting a question. Re-grading recomputes all evidence from saved choices. Invalidation retains the answer history but excludes it from evidence and the three-question budget.
+- Dashboard: student paths retain crossed-out invalidated answers; the concept grid distinguishes direct answer counts from tentative inference and unknown concepts.
+
+The root `app/`, `components/`, and `lib/` directories contain the single application. Run `npm test` for the engine, moderation, and generation regression tests.
