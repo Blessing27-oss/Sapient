@@ -29,3 +29,23 @@ Design notes
 - Dashboard: student paths retain crossed-out invalidated answers; the concept grid distinguishes direct answer counts from tentative inference and unknown concepts.
 
 The root `app/`, `components/`, and `lib/` directories contain the single application. Run `npm test` for the engine, moderation, and generation regression tests.
+
+## Topic maps and PDF generation
+
+Lecture topic maps remain separate from editable assessment connections. The professor workspace keeps the editable lecture topic map; student diagnostics and dashboard retain the detailed lecture maps. Existing rooms without topic maps use their concept connections as a fallback.
+
+### PDF generation efficiency
+
+PDF parsing runs locally with original page boundaries. Formatting-only trailing spaces and excess blank lines are removed before generation; lecture content and equations are retained. Successful parsed PDFs and generated drafts are cached in process memory for 30 minutes (at most 8 documents per cache). Identical concurrent requests share work, failed requests can retry, and each returned draft is an independent copy. Restarting the server clears these caches. The draft cache key includes source, model, prompt, schema, and credentials. No lecture content is written to a new disk cache.
+
+Uploads are limited to 20 MB and 400,000 extracted characters. The current model and topic-map output budget are retained; savings come from avoiding repeated parsing and AI requests rather than dropping material or switching models without evaluation.
+
+### Persistent lecture sources
+
+Readable PDF text is now saved before AI generation to `.data/sources/<source-id>.json`, including filename, original page boundaries, and overlapping text chunks. Original PDF binaries are not retained. Identical extracted content is deduplicated per professor; source files survive process restarts and are excluded from Git. The professor workspace lists saved sources and can generate from them without re-uploading. A failed AI request still leaves the source saved.
+
+Published rooms retain `sourceIds`. Server-side bot code can call `getRoomSources(room, user)` followed by `retrieveSourceChunks(sources, question)` from `lib/sources.ts` to obtain bounded, keyword-ranked excerpts with source ids, filenames, and physical PDF page numbers. This is a retrieval interface, not a chatbot implementation or semantic/vector search. `GET /api/rooms/<code>/sources?q=<question>` exposes the same excerpts only to the room owner or enrolled students. `GET /api/sources` lists the signed-in professor's source metadata.
+
+These files are persistent on this machine's disk. Hosting on ephemeral or serverless filesystems requires moving the source store to durable database/object storage before relying on cross-deployment persistence. Existing rooms without `sourceIds` need a newly uploaded source and a newly published room to gain source-grounded retrieval.
+
+The student study-helper chat retrieves matching saved source excerpts for each question and receives their filenames and physical PDF page numbers for citations. Rooms without saved sources continue to use concept descriptions and the student’s own answered questions.

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bfsTree } from "@/lib/graph";
+import type { MapLayout } from "@/lib/types";
 
 // `flag` draws a small coloured dot on the node (e.g. "not yet verified").
 export type GNode = { id: string; name: string; fill: string; accent?: string; text?: string; flag?: string; editName?: string };
@@ -59,7 +60,7 @@ function route(p: Pt, q: Pt, hwp: number, hwq: number) {
 }
 
 export default function Graph({
-  nodes, edges, selected, onSelect, selectedEdge, onSelectEdge, onConnect, onDeleteNode, onDeleteEdge, onRename, onAddNode, solidRoot,
+  nodes, edges, selected, onSelect, selectedEdge, onSelectEdge, onConnect, onDeleteNode, onDeleteEdge, onRename, onAddNode, solidRoot, layout, onLayoutChange,
 }: {
   nodes: GNode[]; edges: GEdge[]; selected?: string | null; onSelect?: (id: string | null) => void;
   selectedEdge?: number | null; onSelectEdge?: (i: number | null) => void;
@@ -69,6 +70,8 @@ export default function Graph({
   onRename?: (id: string, name: string) => void;
   onAddNode?: (x: number, y: number) => string; // returns the new node's id so we can place it
   solidRoot?: boolean;
+  layout?: MapLayout; // a saved arrangement to start from (e.g. the professor's)
+  onLayoutChange?: (layout: MapLayout) => void; // reports the full arrangement whenever it changes
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const foldId = `fold${useId().replace(/[^a-zA-Z0-9]/g, "")}`; // the S's two greens as a hard-edged gradient, for the solid root node
@@ -89,7 +92,7 @@ export default function Graph({
   const editable = !!onConnect;
 
   // Laid out once, so dragged positions survive edits; concepts added later keep every existing position.
-  const base = useMemo(() => treeLayout(nodes, edges), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const base = useMemo(() => layout ?? treeLayout(nodes, edges), []); // eslint-disable-line react-hooks/exhaustive-deps
   const W = base.w, H = base.h;
   const rootId = nodes[0]?.id;
   const treeEdge = useMemo(() => {
@@ -103,6 +106,14 @@ export default function Graph({
     const i = nodes.findIndex((n) => n.id === id); // concept added via a button: fan out near the middle
     return { x: W / 2 + 80 * Math.cos(i * 2.4), y: H / 2 + 40 * Math.sin(i * 2.4) };
   };
+  // Report the complete arrangement (every node, not just dragged ones) only when it actually changes.
+  const reported = useRef("");
+  useEffect(() => {
+    if (!onLayoutChange) return;
+    const current: MapLayout = { w: W, h: H, pos: Object.fromEntries(nodes.map((n) => [n.id, at(n.id)])) };
+    const key = JSON.stringify(current);
+    if (key !== reported.current) { reported.current = key; onLayoutChange(current); }
+  });
   const toSvg = (e: React.PointerEvent | React.MouseEvent): Pt => {
     const m = svg.current!.getScreenCTM()!.inverse();
     const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m);
