@@ -1,3 +1,4 @@
+import { requireProfessor } from "@/lib/auth";
 import { withDB } from "@/lib/store";
 import type { Question } from "@/lib/types";
 
@@ -5,6 +6,8 @@ import type { Question } from "@/lib/types";
 // revise: question rewritten and earlier responses to it are cleared so students can re-answer.
 // dismiss: keep the question as is.
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const deny = await requireProfessor();
+  if (deny) return deny;
   const { code } = await params;
   const { questionId, action, patch } = (await req.json()) as { questionId: string; action: "invalidate" | "revise" | "dismiss"; patch?: Partial<Question> };
   const ok = await withDB((db) => {

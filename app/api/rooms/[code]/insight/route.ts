@@ -1,6 +1,9 @@
+import { requireProfessor } from "@/lib/auth";
 import { withDB } from "@/lib/store";
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const deny = await requireProfessor();
+  if (deny) return deny;
   const { code } = await params;
   const { conceptId, status, note } = await req.json();
   const ok = await withDB((db) => {

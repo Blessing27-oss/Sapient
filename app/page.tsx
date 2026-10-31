@@ -2,15 +2,14 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Find what students don’t know, before the exam.</h1>
-      <p className="max-w-2xl text-slate-600">
-        A professor-controlled diagnostic: three adaptive questions per student, an editable concept map, and a dashboard
-        that separates what was directly answered from what is only inferred.
+    <div className="mx-auto max-w-3xl space-y-8 py-12 text-center">
+      <h1 className="text-5xl font-bold leading-tight">Find what students don’t know, <span className="text-[#00693e]">before the exam.</span></h1>
+      <p className="mx-auto max-w-xl text-lg text-stone-600">
+        Upload a lecture. Get an editable concept map. Share one code. Three adaptive questions per student show you where the class is struggling.
       </p>
-      <div className="flex gap-3">
-        <Link href="/professor" className="btn">I’m a professor</Link>
-        <Link href="/student" className="btn-ghost">I’m a student</Link>
+      <div className="flex justify-center gap-3">
+        <Link href="/professor" className="btn">Professor workspace</Link>
+        <Link href="/student" className="btn-ghost !px-5 !py-2.5">Join with a code</Link>
       </div>
     </div>
   );

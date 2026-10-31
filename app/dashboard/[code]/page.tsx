@@ -1,10 +1,13 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
+import Graph from "@/components/Graph";
+import ProfessorGate from "@/components/ProfessorGate";
+import ShareCard from "@/components/ShareCard";
 import { LABEL_TEXT } from "@/lib/engine";
 import type { Concept, Insight, Label, Question } from "@/lib/types";
 
 type Dash = {
-  room: { code: string; title: string; concepts: Concept[]; questions: Question[] };
+  room: { code: string; title: string; concepts: Concept[]; edges: { source: string; target: string; weight: number }[]; questions: Question[] };
   students: { id: string; name: string; answered: number; path: { questionId: string; correct: boolean }[]; concepts: { conceptId: string; label: Label }[] }[];
   classRows: { conceptId: string; name: string; asked: number; missed: number; flag: boolean }[];
   challengeGroups: { question: Question; reasons: { student: string; reason: string }[] }[];
@@ -15,8 +18,11 @@ const DOT: Record<Label, string> = {
   "tentative-up": "bg-sky-200", "tentative-down": "bg-orange-200", unknown: "bg-slate-200",
 };
 
-export default function Dashboard({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = use(params);
+export default function Page({ params }: { params: Promise<{ code: string }> }) {
+  return <ProfessorGate><Dashboard code={use(params).code} /></ProfessorGate>;
+}
+
+function Dashboard({ code }: { code: string }) {
   const [d, setD] = useState<Dash | null>(null);
   const [editing, setEditing] = useState<Question | null>(null);
 
@@ -30,20 +36,24 @@ export default function Dashboard({ params }: { params: Promise<{ code: string }
 
   return (
     <div className="space-y-8">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">{d.room.title}</h1>
-          <p className="text-sm text-slate-500">{d.students.length} students joined</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-xs text-slate-500">Room code</p>
-          <p className="text-3xl font-bold tracking-widest">{d.room.code}</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold">{d.room.title}</h1>
+        <p className="text-stone-500">{d.students.length} student{d.students.length === 1 ? "" : "s"} joined · updates live</p>
       </div>
+      <ShareCard code={d.room.code} />
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold">Class concept map</h2>
+        <Graph
+          nodes={d.classRows.map((r) => ({ id: r.conceptId, name: r.name, fill: r.asked === 0 ? "#f5f5f4" : r.flag ? "#fca5a5" : r.missed > 0 ? "#fde68a" : "#86efac" }))}
+          edges={d.room.edges}
+        />
+        <p className="text-xs text-stone-500">Red: at least half of students who directly answered missed it · Amber: some missed · Green: none missed · Grey: no direct answers yet.</p>
+      </section>
 
       {d.challengeGroups.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Challenged questions</h2>
+          <h2 className="text-xl font-bold">Challenged questions</h2>
           {d.challengeGroups.map((g) => (
             <div key={g.question.id} className="card space-y-2 border-amber-400">
               <p className="font-medium">{g.reasons.length} student{g.reasons.length > 1 ? "s" : ""} challenged: “{g.question.text}” — review recommended.</p>
@@ -76,7 +86,7 @@ export default function Dashboard({ params }: { params: Promise<{ code: string }
       )}
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Class diagnostic</h2>
+        <h2 className="text-xl font-bold">Class diagnostic</h2>
         <p className="text-sm text-slate-500">Counts include only students who directly answered a question on the concept. Inferences are excluded.</p>
         <div className="space-y-2">
           {d.classRows.map((r) => (
@@ -102,7 +112,7 @@ export default function Dashboard({ params }: { params: Promise<{ code: string }
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Students</h2>
+        <h2 className="text-xl font-bold">Students</h2>
         <div className="flex flex-wrap gap-3 text-xs">
           {(Object.keys(DOT) as Label[]).map((l) => <span key={l} className="flex items-center gap-1"><i className={`inline-block h-3 w-3 rounded-full ${DOT[l]}`} />{LABEL_TEXT[l]}</span>)}
         </div>

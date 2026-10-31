@@ -1,9 +1,12 @@
+import { requireProfessor } from "@/lib/auth";
 import { extract } from "@/lib/extract";
 import { SAMPLE } from "@/lib/sample";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const deny = await requireProfessor();
+  if (deny) return deny;
   const form = await req.formData();
   const file = form.get("pdf");
   if (!(file instanceof File) || file.size === 0) return Response.json({ ...SAMPLE, source: "sample", note: "Loaded the sample lesson." });

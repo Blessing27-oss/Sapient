@@ -1,7 +1,10 @@
+import { requireProfessor } from "@/lib/auth";
 import { classDiagnostic, classify, computeState, validResponses } from "@/lib/engine";
 import { getRoom } from "@/lib/store";
 
 export async function GET(_: Request, { params }: { params: Promise<{ code: string }> }) {
+  const deny = await requireProfessor();
+  if (deny) return deny;
   const room = await getRoom((await params).code);
   if (!room) return Response.json({ error: "Not found" }, { status: 404 });
   const students = room.students.map((s) => {
@@ -21,7 +24,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ code: stri
       reasons: g.items.map((i) => ({ student: room.students.find((s) => s.id === i.studentId)?.name ?? "?", reason: i.reason })),
     }));
   return Response.json({
-    room: { code: room.code, title: room.title, concepts: room.concepts, questions: room.questions },
+    room: { code: room.code, title: room.title, concepts: room.concepts, edges: room.edges, questions: room.questions },
     students, classRows: classDiagnostic(room), challengeGroups, insights: room.insights,
   });
 }

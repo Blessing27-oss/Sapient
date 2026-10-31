@@ -24,5 +24,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const q = room.questions.find((x) => x.id === r.questionId)!;
     return { questionId: q.id, text: q.text, correct: r.correct, choice: r.choice, options: q.options, correctAnswer: q.correctAnswer, explanation: q.explanation };
   });
-  return Response.json({ done: true, progress, diagnostic, answered });
+  return Response.json({ done: true, progress, diagnostic, answered, edges: room.edges });
 }

@@ -1,141 +1,179 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import Graph from "@/components/Graph";
+import ProfessorGate from "@/components/ProfessorGate";
+import ShareCard from "@/components/ShareCard";
 import type { Concept, Edge, Question } from "@/lib/types";
 
 type Draft = { title: string; concepts: Concept[]; edges: Edge[]; questions: Question[]; note?: string };
 
-export default function Professor() {
-  const router = useRouter();
+export default function ProfessorPage() {
+  return <ProfessorGate><Workspace /></ProfessorGate>;
+}
+
+function Workspace() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"map" | "questions">("map");
+  const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  const [code, setCode] = useState("");
 
   async function generate(file?: File | null) {
     setBusy(true); setErr("");
     const fd = new FormData();
     if (file) fd.append("pdf", file);
     const r = await fetch("/api/generate", { method: "POST", body: fd });
-    setDraft(await r.json());
-    setBusy(false);
+    if (r.status === 401) { location.reload(); return; }
+    const d = await r.json();
+    setDraft(d); setSel(d.concepts[0]?.id ?? null); setBusy(false);
   }
 
-  if (!draft)
+  if (code && draft)
     return (
-      <div className="card max-w-xl space-y-3">
-        <h1 className="text-xl font-semibold">Professor workspace</h1>
-        <p className="text-sm text-slate-600">Upload a lecture PDF. The AI proposes concepts and questions; nothing is used until you approve it.</p>
-        <input type="file" accept="application/pdf" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
-        <div><button className="btn-ghost" disabled={busy} onClick={() => generate(null)}>Use sample Fourier lesson</button></div>
-        {busy && <p className="text-sm text-slate-500">Generating…</p>}
+      <div className="mx-auto max-w-2xl space-y-6">
+        <h1 className="text-3xl font-bold">Your room is live</h1>
+        <p className="text-stone-600">Send students this code or link. They’ll answer three adaptive questions each.</p>
+        <ShareCard code={code} />
+        <Link href={`/dashboard/${code}`} className="btn">Open class dashboard →</Link>
       </div>
     );
 
-  const setConcept = (id: string, p: Partial<Concept>) => setDraft({ ...draft, concepts: draft.concepts.map((c) => (c.id === id ? { ...c, ...p } : c)) });
-  const setQ = (id: string, p: Partial<Question>) => setDraft({ ...draft, questions: draft.questions.map((q) => (q.id === id ? { ...q, ...p } : q)) });
-  const name = (id: string) => draft.concepts.find((c) => c.id === id)?.name ?? id;
-  const neighbors = (id: string) => draft.edges.filter((e) => e.source === id || e.target === id);
-  const removeConcept = (id: string) => setDraft({
-    ...draft,
-    concepts: draft.concepts.filter((c) => c.id !== id),
-    edges: draft.edges.filter((e) => e.source !== id && e.target !== id),
-    questions: draft.questions.map((q) => ({ ...q, conceptIds: q.conceptIds.filter((x) => x !== id) })).filter((q) => q.conceptIds.length),
-  });
+  if (!draft)
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <p className="text-sm font-semibold text-[#00693e]">Step 1 of 3</p>
+          <h1 className="text-3xl font-bold">Upload your lecture</h1>
+          <p className="mt-1 text-stone-600">We’ll extract the key concepts and how they connect. You review and correct everything before students see it.</p>
+        </div>
+        <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white p-12 text-center transition hover:border-[#00693e] hover:bg-green-50/40 ${busy ? "pointer-events-none opacity-60" : ""}`}>
+          <span className="text-4xl">📄</span>
+          <span className="mt-3 font-semibold">{busy ? "Reading your lecture and building the concept map…" : "Click to choose a PDF"}</span>
+          <span className="text-sm text-stone-500">Lecture notes or slides</span>
+          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
+        </label>
+        <button className="text-sm text-stone-500 underline hover:text-[#00693e]" disabled={busy} onClick={() => generate(null)}>No PDF handy? Try the sample Fourier lesson</button>
+      </div>
+    );
+
+  const patch = (p: Partial<Draft>) => setDraft({ ...draft, ...p });
+  const setConcept = (id: string, p: Partial<Concept>) => patch({ concepts: draft.concepts.map((c) => (c.id === id ? { ...c, ...p } : c)) });
+  const setQ = (id: string, p: Partial<Question>) => patch({ questions: draft.questions.map((q) => (q.id === id ? { ...q, ...p } : q)) });
+  const nameOf = (id: string) => draft.concepts.find((c) => c.id === id)?.name ?? id;
+  const sc = draft.concepts.find((c) => c.id === sel);
+  const removeConcept = (id: string) => {
+    patch({
+      concepts: draft.concepts.filter((c) => c.id !== id),
+      edges: draft.edges.filter((e) => e.source !== id && e.target !== id),
+      questions: draft.questions.map((q) => ({ ...q, conceptIds: q.conceptIds.filter((x) => x !== id) })).filter((q) => q.conceptIds.length),
+    });
+    setSel(null);
+  };
   const addConcept = () => {
     const id = `c${Date.now().toString(36)}`;
-    setDraft({ ...draft, concepts: [...draft.concepts, { id, name: "New concept", importance: 1, verified: true }] });
+    patch({ concepts: [...draft.concepts, { id, name: "New concept", importance: 1, verified: true }] });
+    setSel(id);
   };
   const connect = (a: string, b: string) => {
     if (!b || a === b || draft.edges.some((e) => (e.source === a && e.target === b) || (e.source === b && e.target === a))) return;
-    setDraft({ ...draft, edges: [...draft.edges, { source: a, target: b, weight: 0.3, type: "related" }] });
+    patch({ edges: [...draft.edges, { source: a, target: b, weight: 0.3, type: "related" }] });
   };
-  const disconnect = (e: Edge) => setDraft({ ...draft, edges: draft.edges.filter((x) => x !== e) });
   const approved = draft.questions.filter((q) => q.approved).length;
 
-  async function create() {
+  async function publish() {
+    setErr("");
     const r = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
     const j = await r.json();
     if (!r.ok) return setErr(j.error);
-    router.push(`/dashboard/${j.code}`);
+    setCode(j.code);
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-24">
       <div>
-        <input className="input text-xl font-semibold" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+        <p className="text-sm font-semibold text-[#00693e]">Step 2 of 3 · Review</p>
+        <input className="w-full bg-transparent font-serif text-3xl font-bold outline-none focus:underline" value={draft.title} onChange={(e) => patch({ title: e.target.value })} />
         {draft.note && <p className="mt-1 text-sm text-amber-700">{draft.note}</p>}
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Concepts ({draft.concepts.length})</h2>
-          <button className="btn-ghost" onClick={addConcept}>+ Add concept</button>
+      <div className="flex gap-1 border-b border-stone-200">
+        {([["map", `Concept map (${draft.concepts.length})`], ["questions", `Questions (${approved}/${draft.questions.length} approved)`]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === k ? "border-[#00693e] text-[#00693e]" : "border-transparent text-stone-500"}`}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "map" && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="space-y-2">
+            <Graph nodes={draft.concepts.map((c) => ({ id: c.id, name: c.name, fill: c.foundational ? "#bbf7d0" : "#fff", ring: !c.verified }))} edges={draft.edges} selected={sel} onSelect={setSel} />
+            <p className="text-xs text-stone-500">Click a concept to edit it. Dashed outline = not yet verified. Lines mean “possibly relevant for assessment”, not “mastery of one proves the other”.</p>
+          </div>
+          <div className="card space-y-3 self-start">
+            {sc ? (
+              <>
+                <input className="input font-semibold" value={sc.name} onChange={(e) => setConcept(sc.id, { name: e.target.value })} />
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sc.verified} onChange={(e) => setConcept(sc.id, { verified: e.target.checked })} /> I’ve verified this concept</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!sc.foundational} onChange={(e) => setConcept(sc.id, { foundational: e.target.checked, importance: e.target.checked ? 1 : sc.importance })} /> Foundational</label>
+                <label className="block text-sm">Importance: {sc.importance.toFixed(1)}
+                  <input type="range" min={0.1} max={1} step={0.1} className="w-full accent-[#00693e]" value={sc.importance} onChange={(e) => setConcept(sc.id, { importance: Number(e.target.value) })} />
+                </label>
+                <div>
+                  <p className="mb-1 text-sm font-medium">Connected to</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {draft.edges.filter((e) => e.source === sc.id || e.target === sc.id).map((e, i) => (
+                      <span key={i} className="chip">{nameOf(e.source === sc.id ? e.target : e.source)} <button className="ml-1 text-stone-400 hover:text-red-600" onClick={() => patch({ edges: draft.edges.filter((x) => x !== e) })}>✕</button></span>
+                    ))}
+                  </div>
+                  <select className="input mt-2" value="" onChange={(e) => connect(sc.id, e.target.value)}>
+                    <option value="">+ Connect to…</option>
+                    {draft.concepts.filter((o) => o.id !== sc.id).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <button className="text-sm text-red-600 hover:underline" onClick={() => removeConcept(sc.id)}>Delete concept</button>
+              </>
+            ) : <p className="text-sm text-stone-500">Select a concept on the map.</p>}
+            <button className="btn-ghost w-full" onClick={addConcept}>+ Add concept</button>
+          </div>
         </div>
-        <p className="text-sm text-slate-500">Relationships mean “possibly relevant for assessment”, not “mastery of one proves the other”.</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {draft.concepts.map((c) => (
-            <div key={c.id} className="card space-y-2">
-              <div className="flex gap-2">
-                <input className="input" value={c.name} onChange={(e) => setConcept(c.id, { name: e.target.value })} />
-                <button className="btn-ghost" onClick={() => removeConcept(c.id)}>✕</button>
+      )}
+
+      {tab === "questions" && (
+        <div className="space-y-4">
+          <div className="flex justify-end"><button className="btn-ghost" onClick={() => patch({ questions: draft.questions.map((q) => ({ ...q, approved: true })) })}>Approve all</button></div>
+          {draft.questions.map((q, n) => (
+            <div key={q.id} className={`card space-y-3 ${q.approved ? "!border-[#00693e]" : ""}`}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-xs font-semibold text-stone-400">Q{n + 1}{q.sourcePage ? ` · p.${q.sourcePage}` : ""}</span>
+                <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={!!q.approved} onChange={(e) => setQ(q.id, { approved: e.target.checked })} /> Approved</label>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs">
-                <label><input type="checkbox" checked={c.verified} onChange={(e) => setConcept(c.id, { verified: e.target.checked })} /> verified</label>
-                <label><input type="checkbox" checked={!!c.foundational} onChange={(e) => setConcept(c.id, { foundational: e.target.checked, importance: e.target.checked ? 1 : c.importance })} /> foundational</label>
-                <label>importance <input className="w-14 rounded border px-1" type="number" min={0} max={1} step={0.1} value={c.importance} onChange={(e) => setConcept(c.id, { importance: Number(e.target.value) })} /></label>
+              <textarea className="input" rows={2} value={q.text} onChange={(e) => setQ(q.id, { text: e.target.value })} />
+              {q.options.map((o, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input type="radio" className="accent-[#00693e]" checked={q.correctAnswer === i} onChange={() => setQ(q.id, { correctAnswer: i })} title="Mark correct" />
+                  <input className={`input ${q.correctAnswer === i ? "!border-green-500 bg-green-50" : ""}`} value={o} onChange={(e) => setQ(q.id, { options: q.options.map((x, j) => (j === i ? e.target.value : x)) })} />
+                </div>
+              ))}
+              <input className="input" placeholder="Explanation shown to students" value={q.explanation ?? ""} onChange={(e) => setQ(q.id, { explanation: e.target.value })} />
+              <div className="flex flex-wrap gap-1.5">
+                {draft.concepts.map((c) => {
+                  const on = q.conceptIds.includes(c.id);
+                  return <button key={c.id} onClick={() => setQ(q.id, { conceptIds: on ? q.conceptIds.filter((x) => x !== c.id) : [...q.conceptIds, c.id] })} className={`chip ${on ? "!bg-[#00693e] !text-white" : ""}`}>{c.name}</button>;
+                })}
               </div>
-              <div className="flex flex-wrap gap-1 text-xs">
-                {neighbors(c.id).map((e, i) => (
-                  <span key={i} className="rounded bg-slate-100 px-2 py-0.5">
-                    {name(e.source === c.id ? e.target : e.source)}{" "}
-                    <button onClick={() => disconnect(e)} title="Disconnect">✕</button>
-                  </span>
-                ))}
-                <select className="rounded border text-xs" value="" onChange={(e) => connect(c.id, e.target.value)}>
-                  <option value="">+ connect…</option>
-                  {draft.concepts.filter((o) => o.id !== c.id).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </div>
+              <button className="text-sm text-red-600 hover:underline" onClick={() => patch({ questions: draft.questions.filter((x) => x.id !== q.id) })}>Remove question</button>
             </div>
           ))}
         </div>
-      </section>
+      )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Questions ({approved}/{draft.questions.length} approved)</h2>
-          <button className="btn-ghost" onClick={() => setDraft({ ...draft, questions: draft.questions.map((q) => ({ ...q, approved: true })) })}>Approve all</button>
+      <div className="fixed inset-x-0 bottom-0 border-t border-stone-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+          <p className="text-sm text-stone-600">{approved === 0 ? "Approve at least one question to publish." : `${approved} approved question${approved > 1 ? "s" : ""} will be used.`}{err && <span className="ml-2 text-red-600">{err}</span>}</p>
+          <button className="btn" disabled={!approved} onClick={publish}>Publish &amp; get student link →</button>
         </div>
-        {draft.questions.map((q) => (
-          <div key={q.id} className={`card space-y-2 ${q.approved ? "border-green-400" : ""}`}>
-            <textarea className="input" rows={2} value={q.text} onChange={(e) => setQ(q.id, { text: e.target.value })} />
-            {q.options.map((o, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input type="radio" checked={q.correctAnswer === i} onChange={() => setQ(q.id, { correctAnswer: i })} title="Correct answer" />
-                <input className="input" value={o} onChange={(e) => setQ(q.id, { options: q.options.map((x, j) => (j === i ? e.target.value : x)) })} />
-              </div>
-            ))}
-            <input className="input" placeholder="Explanation" value={q.explanation ?? ""} onChange={(e) => setQ(q.id, { explanation: e.target.value })} />
-            <div className="flex flex-wrap items-center gap-1 text-xs">
-              {draft.concepts.map((c) => {
-                const on = q.conceptIds.includes(c.id);
-                return (
-                  <button key={c.id} onClick={() => setQ(q.id, { conceptIds: on ? q.conceptIds.filter((x) => x !== c.id) : [...q.conceptIds, c.id] })}
-                    className={`rounded px-2 py-0.5 ${on ? "bg-indigo-600 text-white" : "bg-slate-100"}`}>{c.name}</button>
-                );
-              })}
-              {q.sourcePage && <span className="ml-2 text-slate-500">p.{q.sourcePage}</span>}
-            </div>
-            <div className="flex gap-3 text-sm">
-              <label><input type="checkbox" checked={!!q.approved} onChange={(e) => setQ(q.id, { approved: e.target.checked })} /> approve</label>
-              <button className="text-red-600" onClick={() => setDraft({ ...draft, questions: draft.questions.filter((x) => x.id !== q.id) })}>remove</button>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      {err && <p className="text-red-600">{err}</p>}
-      <button className="btn" disabled={!approved} onClick={create}>Create room with {approved} approved questions</button>
+      </div>
     </div>
   );
 }
