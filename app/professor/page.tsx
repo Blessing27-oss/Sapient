@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Graph from "@/components/Graph";
 import ProfessorGate from "@/components/ProfessorGate";
@@ -17,8 +17,20 @@ function Workspace() {
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"map" | "questions">("map");
   const [sel, setSel] = useState<string | null>(null);
+  const [selEdge, setSelEdge] = useState<number | null>(null);
   const [err, setErr] = useState("");
   const [code, setCode] = useState("");
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (selEdge === null || (e.key !== "Delete" && e.key !== "Backspace") || /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
+      setDraft((d) => d && { ...d, edges: d.edges.filter((_, i) => i !== selEdge) });
+      setSelEdge(null);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [selEdge]);
 
   async function generate(file?: File | null) {
     setBusy(true); setErr("");
@@ -71,15 +83,18 @@ function Workspace() {
     });
     setSel(null);
   };
-  const addConcept = () => {
+  const addConcept = (): string => {
     const id = `c${Date.now().toString(36)}`;
     patch({ concepts: [...draft.concepts, { id, name: "New concept", importance: 1, verified: true }] });
-    setSel(id);
+    setSel(id); setSelEdge(null);
+    return id;
   };
   const connect = (a: string, b: string) => {
     if (!b || a === b || draft.edges.some((e) => (e.source === a && e.target === b) || (e.source === b && e.target === a))) return;
     patch({ edges: [...draft.edges, { source: a, target: b, weight: 0.3, type: "related" }] });
+    setSelEdge(draft.edges.length);
   };
+  const se = selEdge !== null ? draft.edges[selEdge] : undefined;
   const approved = draft.questions.filter((q) => q.approved).length;
 
   async function publish() {
@@ -104,14 +119,36 @@ function Workspace() {
         ))}
       </div>
 
-      {tab === "map" && (
+      <div className={tab === "map" ? "" : "hidden"}>
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-2">
-            <Graph nodes={draft.concepts.map((c) => ({ id: c.id, name: c.name, fill: c.foundational ? "#bbf7d0" : "#fff", ring: !c.verified }))} edges={draft.edges} selected={sel} onSelect={setSel} />
-            <p className="text-xs text-stone-500">Click a concept to edit it. Dashed outline = not yet verified. Lines mean “possibly relevant for assessment”, not “mastery of one proves the other”.</p>
+            <Graph
+              nodes={draft.concepts.map((c) => ({ id: c.id, name: c.name, fill: c.foundational ? "#bbf7d0" : "#fff", ring: !c.verified }))}
+              edges={draft.edges}
+              selected={sel}
+              onSelect={(id) => { setSel(id); if (id) setSelEdge(null); }}
+              selectedEdge={selEdge}
+              onSelectEdge={(i) => { setSelEdge(i); if (i !== null) setSel(null); }}
+              onConnect={connect}
+              onAddNode={() => addConcept()}
+            />
+            <p className="text-xs text-stone-500">
+              <b>Drag</b> a concept to move it · drag its green <b>+</b> onto another concept to connect · click a line to select, then press Delete · <b>double-click</b> empty space to add a concept. Dashed outline = not yet verified. Lines mean “possibly relevant for assessment”, not “mastery of one proves the other”.
+            </p>
           </div>
           <div className="card space-y-3 self-start">
-            {sc ? (
+            {se && selEdge !== null ? (
+              <>
+                <p className="text-sm font-semibold">Relationship</p>
+                <p className="text-sm">{nameOf(se.source)} <span className="text-stone-400">↔</span> {nameOf(se.target)}</p>
+                <label className="block text-sm">Strength: {se.weight.toFixed(1)}
+                  <input type="range" min={0.1} max={0.5} step={0.1} className="w-full accent-[#00693e]" value={se.weight}
+                    onChange={(e) => patch({ edges: draft.edges.map((x, i) => (i === selEdge ? { ...x, weight: Number(e.target.value) } : x)) })} />
+                </label>
+                <p className="text-xs text-stone-500">How much a direct answer on one concept counts as a hint about the other. It never counts as mastery.</p>
+                <button className="btn-ghost w-full !text-red-600" onClick={() => { patch({ edges: draft.edges.filter((_, i) => i !== selEdge) }); setSelEdge(null); }}>Remove relationship</button>
+              </>
+            ) : sc ? (
               <>
                 <input className="input font-semibold" value={sc.name} onChange={(e) => setConcept(sc.id, { name: e.target.value })} />
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sc.verified} onChange={(e) => setConcept(sc.id, { verified: e.target.checked })} /> I’ve verified this concept</label>
@@ -123,7 +160,7 @@ function Workspace() {
                   <p className="mb-1 text-sm font-medium">Connected to</p>
                   <div className="flex flex-wrap gap-1.5">
                     {draft.edges.filter((e) => e.source === sc.id || e.target === sc.id).map((e, i) => (
-                      <span key={i} className="chip">{nameOf(e.source === sc.id ? e.target : e.source)} <button className="ml-1 text-stone-400 hover:text-red-600" onClick={() => patch({ edges: draft.edges.filter((x) => x !== e) })}>✕</button></span>
+                      <span key={i} className="chip">{nameOf(e.source === sc.id ? e.target : e.source)} <button className="ml-1 text-stone-400 hover:text-red-600" onClick={() => { patch({ edges: draft.edges.filter((x) => x !== e) }); setSelEdge(null); }}>✕</button></span>
                     ))}
                   </div>
                   <select className="input mt-2" value="" onChange={(e) => connect(sc.id, e.target.value)}>
@@ -134,10 +171,10 @@ function Workspace() {
                 <button className="text-sm text-red-600 hover:underline" onClick={() => removeConcept(sc.id)}>Delete concept</button>
               </>
             ) : <p className="text-sm text-stone-500">Select a concept on the map.</p>}
-            <button className="btn-ghost w-full" onClick={addConcept}>+ Add concept</button>
+            <button className="btn-ghost w-full" onClick={() => addConcept()}>+ Add concept</button>
           </div>
         </div>
-      )}
+      </div>
 
       {tab === "questions" && (
         <div className="space-y-4">
