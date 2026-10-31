@@ -22,8 +22,17 @@ export async function POST(req: Request) {
     .map((q) => ({ ...q, approved: !!q.approved && !questionProblems(q, conceptIds).length, invalidated: false }));
   const code = await withDB((db) => {
     const code = newCode(db);
-    db[code] = { code, ownerId: user.id, sourceIds, title: b.title, concepts: b.concepts, edges: b.edges, topicMap: b.topicMap, questions, students: [], challenges: [], insights: [] };
+    db[code] = { code, ownerId: user.id, sourceIds, topicMap: b.topicMap, title: b.title, concepts: b.concepts, edges: b.edges, layout: validLayout(b.layout), questions, students: [], challenges: [], insights: [] };
     return code;
   });
   return Response.json({ code });
+}
+
+// Keep the professor's map arrangement only if it is well-formed; otherwise students get the automatic layout.
+function validLayout(l: unknown): Room["layout"] {
+  const v = l as Room["layout"];
+  const num = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+  if (!v || !num(v.w) || !num(v.h) || !v.pos || typeof v.pos !== "object") return undefined;
+  const pos = Object.fromEntries(Object.entries(v.pos).filter(([, p]) => p && num(p.x) && num(p.y)).map(([id, p]) => [id, { x: p.x, y: p.y }]));
+  return { w: v.w, h: v.h, pos };
 }

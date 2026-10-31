@@ -33,6 +33,7 @@ export type Challenge = {
   at: number;
 };
 export type Insight = { conceptId: string; status: "open" | "useful" | "dismissed"; note?: string };
+export type MapLayout = { w: number; h: number; pos: Record<string, { x: number; y: number }> };
 export type Room = {
   code: string;
   ownerId?: string;
@@ -41,6 +42,7 @@ export type Room = {
   concepts: Concept[];
   edges: Edge[];
   topicMap?: TopicMap;
+  layout?: MapLayout;
   questions: Question[];
   students: Student[];
   challenges: Challenge[];

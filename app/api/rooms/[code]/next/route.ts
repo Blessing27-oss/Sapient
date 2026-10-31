@@ -22,12 +22,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     return Response.json({ question: safe, progress });
   }
   const diagnostic = room.concepts.map((c) => ({
-    conceptId: c.id, name: c.name, label: classify(state[c.id]),
+    conceptId: c.id, name: c.name, foundational: !!c.foundational, description: c.description, label: classify(state[c.id]),
     evidence: { correct: state[c.id].correctCount, wrong: state[c.id].wrongCount },
   }));
   const answered = valid.map((r) => {
     const q = room.questions.find((x) => x.id === r.questionId)!;
     return { questionId: q.id, text: q.text, correct: gradeResponse(q, r), choice: r.choice, options: q.options, correctAnswer: q.correctAnswer, explanation: q.explanation };
   });
-  return Response.json({ done: true, progress, diagnostic, answered, edges: room.edges, title: room.title, topicMap: room.topicMap });
+  return Response.json({ done: true, progress, diagnostic, answered, edges: room.edges, layout: room.layout, title: room.title, topicMap: room.topicMap });
 }

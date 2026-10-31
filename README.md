@@ -32,7 +32,7 @@ The root `app/`, `components/`, and `lib/` directories contain the single applic
 
 ## Topic maps and PDF generation
 
-Lecture topic maps remain separate from editable assessment connections. The professor workspace offers both views; student diagnostics and dashboard retain the detailed lecture maps. Existing rooms without topic maps use their concept connections as a fallback.
+Lecture topic maps remain separate from editable assessment connections. The professor workspace keeps the editable lecture topic map; student diagnostics and dashboard retain the detailed lecture maps. Existing rooms without topic maps use their concept connections as a fallback.
 
 ### PDF generation efficiency
 
@@ -47,3 +47,5 @@ Readable PDF text is now saved before AI generation to `.data/sources/<source-id
 Published rooms retain `sourceIds`. Server-side bot code can call `getRoomSources(room, user)` followed by `retrieveSourceChunks(sources, question)` from `lib/sources.ts` to obtain bounded, keyword-ranked excerpts with source ids, filenames, and physical PDF page numbers. This is a retrieval interface, not a chatbot implementation or semantic/vector search. `GET /api/rooms/<code>/sources?q=<question>` exposes the same excerpts only to the room owner or enrolled students. `GET /api/sources` lists the signed-in professor's source metadata.
 
 These files are persistent on this machine's disk. Hosting on ephemeral or serverless filesystems requires moving the source store to durable database/object storage before relying on cross-deployment persistence. Existing rooms without `sourceIds` need a newly uploaded source and a newly published room to gain source-grounded retrieval.
+
+The student study-helper chat retrieves matching saved source excerpts for each question and receives their filenames and physical PDF page numbers for citations. Rooms without saved sources continue to use concept descriptions and the student’s own answered questions.
