@@ -61,19 +61,37 @@ function Workspace() {
 
   if (!draft)
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div>
-          <p className="text-sm font-semibold text-[#00693e]">Step 1 of 3</p>
-          <h1 className="text-3xl font-bold">Upload your lecture</h1>
-          <p className="mt-1 text-stone-600">We’ll extract the key concepts and how they connect. You review and correct everything before students see it.</p>
+      <div className="grid items-start gap-10 lg:grid-cols-[1.2fr_1fr]">
+        <div className="space-y-6">
+          <div>
+            <p className="text-sm font-semibold text-[#00693e]">Step 1 of 3</p>
+            <h1 className="text-4xl font-bold">Upload your lecture</h1>
+            <p className="mt-2 text-stone-600">We read your PDF and propose the key concepts, how they connect, and quiz questions. You review and correct everything before any student sees it.</p>
+          </div>
+          <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white px-8 py-16 text-center transition hover:border-[#00693e] hover:bg-green-50/40 ${busy ? "pointer-events-none opacity-60" : ""}`}>
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl">📄</span>
+            <span className="mt-4 text-lg font-semibold">{busy ? "Reading your lecture and building the concept map…" : "Click to choose a PDF"}</span>
+            <span className="mt-1 text-sm text-stone-500">Lecture notes or slides · text-based PDFs work best</span>
+            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
+          </label>
+          {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
         </div>
-        <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white p-12 text-center transition hover:border-[#00693e] hover:bg-green-50/40 ${busy ? "pointer-events-none opacity-60" : ""}`}>
-          <span className="text-4xl">📄</span>
-          <span className="mt-3 font-semibold">{busy ? "Reading your lecture and building the concept map…" : "Click to choose a PDF"}</span>
-          <span className="text-sm text-stone-500">Lecture notes or slides</span>
-          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && generate(e.target.files[0])} />
-        </label>
-        {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
+
+        <div className="card space-y-5">
+          <h2 className="text-xl font-bold">How it works</h2>
+          {[
+            ["Upload", "Add a lecture PDF."],
+            ["Review the map", "Edit concepts, drag to connect them, and approve each question."],
+            ["Share a code", "Students join with a 4-letter code or link, no accounts needed."],
+            ["See the gaps", "Each student answers 3 adaptive questions. Your dashboard shows where the class is stuck."],
+          ].map(([t, d], i) => (
+            <div key={t} className="flex gap-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00693e] text-sm font-bold text-white">{i + 1}</span>
+              <div><p className="font-semibold">{t}</p><p className="text-sm text-stone-500">{d}</p></div>
+            </div>
+          ))}
+          <p className="border-t pt-4 text-xs text-stone-500">Nothing is used in a live room until you approve it. You stay in control of what counts as knowledge worth assessing.</p>
+        </div>
       </div>
     );
 

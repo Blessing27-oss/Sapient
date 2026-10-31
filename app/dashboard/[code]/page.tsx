@@ -152,7 +152,13 @@ function Dashboard({ code }: { code: string }) {
         </div>
         <p className="text-xs text-stone-500">Cells show correct / direct answers. Dashed ~ cells are inferred only; — means unknown. Crossed-out path entries are invalidated and excluded from the question budget.</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          {d.students.length === 0 && (
+            <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-stone-500">
+              <p className="font-semibold text-stone-700">Waiting for students to join</p>
+              <p className="text-sm">Share the code above. Results appear here live as students answer.</p>
+            </div>
+          )}
+          <table className={`w-full text-left text-sm ${d.students.length === 0 ? "hidden" : ""}`}>
             <thead><tr><th className="p-1">Student</th><th className="p-1">Path</th>{d.room.concepts.map((c) => <th key={c.id} className="p-1 text-xs font-normal [writing-mode:vertical-rl]">{c.name}</th>)}</tr></thead>
             <tbody>
               {d.students.map((s) => (

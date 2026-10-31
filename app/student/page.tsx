@@ -47,13 +47,36 @@ function StudentInner() {
 
   if (!sid)
     return (
-      <div className="mx-auto mt-8 max-w-sm space-y-4 text-center">
-        <h1 className="text-3xl font-bold">Join your class</h1>
-        <div className="card space-y-3 text-left">
-          <input className="input text-center font-mono text-2xl uppercase tracking-[0.3em]" maxLength={4} placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-          <input className="input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && code && name && join()} />
-          {err && <p className="text-sm text-red-600">{err}</p>}
-          <button className="btn w-full" disabled={!code || !name} onClick={join}>Start</button>
+      <div className="mx-auto grid max-w-4xl items-start gap-10 py-6 md:grid-cols-2">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-4xl font-bold">Join your class</h1>
+            <p className="mt-2 text-stone-600">Enter the code your professor shared and your name to begin.</p>
+          </div>
+          <div className="card space-y-3">
+            <label className="block text-sm font-medium">Room code
+              <input className="input mt-1 text-center font-mono text-3xl uppercase tracking-[0.3em]" maxLength={4} placeholder="ABCD" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+            </label>
+            <label className="block text-sm font-medium">Your name
+              <input className="input mt-1" placeholder="First name is fine" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && code && name && join()} />
+            </label>
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            <button className="btn w-full !py-3" disabled={!code || !name} onClick={join}>Start</button>
+          </div>
+        </div>
+        <div className="card space-y-4">
+          <h2 className="text-xl font-bold">What to expect</h2>
+          {[
+            ["3 questions", "Just three multiple-choice questions, one at a time."],
+            ["They adapt", "Your next question depends on how you answered, so you and a classmate may see different ones."],
+            ["Your results", "At the end you get a map of what you showed you know, what needs review, and what is only a guess."],
+            ["You can push back", "Think a question was unclear? Tell your professor and they can review it."],
+          ].map(([t, d]) => (
+            <div key={t} className="flex gap-3">
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#00693e]" />
+              <div><p className="font-semibold">{t}</p><p className="text-sm text-stone-500">{d}</p></div>
+            </div>
+          ))}
         </div>
       </div>
     );

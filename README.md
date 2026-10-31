@@ -7,10 +7,8 @@ Find what students don't know, before the exam. A professor-controlled adaptive 
 
 Set `ANTHROPIC_API_KEY=...` to enable PDF -> concepts/questions extraction. The professor workspace requires a PDF upload. PDF generation reports errors explicitly and never silently substitutes sample content. PDF text is extracted page by page, so source citations retain the original page numbers.
 
-Professor access: only `mitchelle.k.ngare.27@dartmouth.edu` (`lib/auth.ts`). Set `GOOGLE_CLIENT_ID` (a Google
-OAuth web client with your origin authorised) for real Google sign-in, verified server-side. Also set
-`SESSION_SECRET`. Without a client ID, a dev-only email login works outside production and is NOT secure.
-Students need no account.
+Professor access: sign in by typing the word `Prof` (case-insensitive; set `SESSION_SECRET` for stable sessions). It is a shared word, not real authentication: anyone who knows it is a
+professor. Students need no account.
 
 Flow: `/professor` (upload/edit/approve -> room code) -> `/student` (join, 3 adaptive questions, diagnostic,
 "I disagree" challenge) -> `/dashboard/<code>` (class diagnostic, challenged questions, per-student map).
