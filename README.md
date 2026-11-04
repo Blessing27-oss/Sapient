@@ -1,51 +1,306 @@
-# Sapient
+<p align="center">
+  <img src="docs/images/sapient-overview.svg" alt="Sapient — Every lecture, mapped. A lecture PDF becomes a professor-reviewed map, adaptive questions, and class insights." width="100%" />
+</p>
 
-Find what students don't know, before the exam. A professor-controlled adaptive diagnostic.
+<p align="center"><strong>Find what students don't know, before the exam.</strong><br />A professor-controlled, AI-assisted lecture mapping and adaptive diagnostic platform.</p>
 
-    npm install && npm run dev      # http://localhost:3000
-    npm test                        # engine tests
+<p align="center"><strong><a href="https://sapient-production.up.railway.app">Try the live app →</a></strong></p>
 
-Set `ANTHROPIC_API_KEY=...` to enable PDF -> concepts/questions extraction. The professor workspace requires a PDF upload. PDF generation reports errors explicitly and never silently substitutes sample content. PDF text is extracted page by page, so source citations retain the original page numbers.
+<p align="center">
+  <a href="#hackathon">Dartmouth AI @ 70</a> ·
+  <a href="#the-project">Project</a> ·
+  <a href="#system-architecture">Architecture</a> ·
+  <a href="#getting-started">Run locally</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="#team">Team</a>
+</p>
 
-Accounts: people sign up with a name and password and choose Professor or Student. Names are unique and double as the
-login. There is no professor verification, so anyone can create a professor account. Set `SESSION_SECRET` for
-stable sessions.
+## Hackathon
 
-Flow: `/professor` (upload/edit/approve -> room code) -> `/student` (join, 3 adaptive questions, diagnostic,
-"I disagree" challenge) -> `/dashboard/<code>` (class diagnostic, challenged questions, per-student map).
+Sapient was built for **Dartmouth AI @ 70**, the **AI at 70 Student Hackathon**, held **October 30–31, 2026, in Hanover, New Hampshire**. The event brought students together to prototype solutions at the intersection of AI and human judgment, alongside Dartmouth's *What Must Remain Human?* conference. See the [hackathon website and schedule](https://dartmouth-ai-hackathon.vercel.app/#schedule) for event details, and Dartmouth’s [AI at 70 Student Hackathon overview](https://ai.dartmouth.edu/ai-70-events/what-must-remain-human-conference/ai-70-student-hackathon) for additional context.
 
-Design notes
-- Store: JSON file in `.data/` (swap for Supabase later). Students join by 4-letter room code; professor routes are session-protected.
-- Engine (`lib/engine.ts`): one-hop undirected propagation; evidence is recomputed from valid responses, so
-  invalidating a question exactly removes its effect. Inferred evidence never becomes "Demonstrated strength".
-- Selection deviates from the spec formula: importance/(1+directCount) ignores correctness, so all students
-  would get the same sequence. We adjust by evidence (probe suspected gaps/conflicts, deprioritise
-  plausible-by-inference concepts). Weights are illustrative, not validated.
-- Not demonstrated: that 3 questions accurately recover a knowledge state. That needs a fixed-quiz comparison.
+Our answer to that theme is a classroom tool where AI drafts learning materials and helps surface possible gaps, while professors approve assessments, interpret the evidence, and resolve student challenges. Students can question an assessment rather than simply accept an automated result.
 
-- Generation (`lib/extract.ts`): structured-output generation with server-side fallback; generated concepts and questions require professor review. Source pages outside the document are omitted.
-- Evidence spread: directly tested concepts count once per answer. Each untested neighbor receives only the strongest connecting edge weight, once per answer and one hop only.
-- Revisions: choose **Keep choices and re-grade** for answer-key corrections (option positions must remain the same), or **Clear answers** when rewriting a question. Re-grading recomputes all evidence from saved choices. Invalidation retains the answer history but excludes it from evidence and the three-question budget.
-- Dashboard: student paths retain crossed-out invalidated answers; the concept grid distinguishes direct answer counts from tentative inference and unknown concepts.
+## The project
 
-The root `app/`, `components/`, and `lib/` directories contain the single application. Run `npm test` for the engine, moderation, and generation regression tests.
+A lecture can cover dozens of connected ideas, but a final score rarely tells a professor which ideas need another explanation. Students also need a clearer starting point for revision than “study everything.”
 
-## Topic maps and PDF generation
+**Sapient turns lecture PDFs into editable topic maps and short, adaptive diagnostics.** Professors review the generated material before publishing a room. Students join with a room code, answer three adaptive questions, and see concept-level evidence alongside a lecture map. Professors receive a class dashboard for follow-up teaching.
 
-Lecture topic maps remain separate from editable assessment connections. The professor workspace keeps the editable lecture topic map; student diagnostics and dashboard retain the detailed lecture maps. Existing rooms without topic maps use their concept connections as a fallback.
+### What you can do
 
-### PDF generation efficiency
+| For professors | For students |
+| --- | --- |
+| Upload a lecture PDF or reuse a saved source | Join a lecture room with a four-letter code |
+| Edit lecture maps, concept connections, and questions | Complete a three-question adaptive diagnostic |
+| Approve questions before students receive them | Explore demonstrated strengths, review areas, and tentative inferences |
+| See class gaps, individual paths, and recurring study topics | Revisit lecture maps and ask a source-grounded study helper |
+| Correct answer keys, invalidate questions, and resolve challenges | Generate practice questions and challenge an assessment |
 
-PDF parsing runs locally with original page boundaries. Formatting-only trailing spaces and excess blank lines are removed before generation; lecture content and equations are retained. Successful parsed PDFs and generated drafts are cached in process memory for 30 minutes (at most 8 documents per cache). Identical concurrent requests share work, failed requests can retry, and each returned draft is an independent copy. Restarting the server clears these caches. The draft cache key includes source, model, prompt, schema, and credentials. No lecture content is written to a new disk cache.
+### The classroom workflow
 
-Uploads are limited to 20 MB and 400,000 extracted characters. The current model and topic-map output budget are retained; savings come from avoiding repeated parsing and AI requests rather than dropping material or switching models without evaluation.
+```mermaid
+flowchart LR
+    A[Upload lecture PDF] --> B[AI drafts map and questions]
+    B --> C[Professor edits and approves]
+    C --> D[Publish room code]
+    D --> E[Student answers adaptive questions]
+    E --> F[Personal concept diagnostic]
+    F --> G[Study helper and practice]
+    E --> H[Professor dashboard]
+    F --> I[Student challenges a question]
+    I --> J[Professor reviews and corrects]
+    J --> H
+```
 
-### Persistent lecture sources
+*Figure 1. The learning loop keeps professor review before publication and supports corrections after assessment.*
 
-Readable PDF text is now saved before AI generation to `.data/sources/<source-id>.json`, including filename, original page boundaries, and overlapping text chunks. Original PDF binaries are not retained. Identical extracted content is deduplicated per professor; source files survive process restarts and are excluded from Git. The professor workspace lists saved sources and can generate from them without re-uploading. A failed AI request still leaves the source saved.
+## System architecture
 
-Published rooms retain `sourceIds`. Server-side bot code can call `getRoomSources(room, user)` followed by `retrieveSourceChunks(sources, question)` from `lib/sources.ts` to obtain bounded, keyword-ranked excerpts with source ids, filenames, and physical PDF page numbers. This is a retrieval interface, not a chatbot implementation or semantic/vector search. `GET /api/rooms/<code>/sources?q=<question>` exposes the same excerpts only to the room owner or enrolled students. `GET /api/sources` lists the signed-in professor's source metadata.
+Sapient is a single **Next.js App Router application**. React renders the professor, student, and dashboard interfaces; server route handlers manage authentication, generation, assessment, and persistence.
 
-These files are persistent on this machine's disk. Hosting on ephemeral or serverless filesystems requires moving the source store to durable database/object storage before relying on cross-deployment persistence. Existing rooms without `sourceIds` need a newly uploaded source and a newly published room to gain source-grounded retrieval.
+```mermaid
+flowchart TB
+    subgraph UI[Browser interfaces]
+        P[Professor workspace]
+        S[Student diagnostic and study helper]
+        D[Class dashboard]
+    end
+    subgraph Server[Next.js server / Node.js]
+        API[Route handlers and session checks]
+        PDF[Local PDF text extraction]
+        GEN[Structured draft generation and validation]
+        ENG[Deterministic adaptive engine]
+        RET[Keyword-ranked source retrieval]
+    end
+    AI[Anthropic API]
+    DB[(Local JSON stores)]
+    P --> API
+    S --> API
+    D --> API
+    API --> PDF
+    PDF --> GEN
+    GEN <--> AI
+    API --> ENG
+    API --> RET
+    API <--> DB
+    RET --> DB
+    API <-->|Study chat and practice| AI
+```
 
-The student study-helper chat retrieves matching saved source excerpts for each question and receives their filenames and physical PDF page numbers for citations. Rooms without saved sources continue to use concept descriptions and the student’s own answered questions.
+*Figure 2. AI generates content and study support; the local engine computes diagnostic evidence and question selection.*
+
+### Technology stack
+
+| Layer | Implementation |
+| --- | --- |
+| Application | Next.js 15.5, React 19, TypeScript |
+| Styling | Tailwind CSS 4 and custom CSS |
+| AI integration | Anthropic SDK; model identifiers are configured in the server code |
+| PDF extraction | `unpdf`, processed locally with original page boundaries |
+| Graph visualization | SVG/React components and Dagre layout |
+| Authentication | Salted scrypt password hashes and HMAC-signed session cookies |
+| Persistence | Local JSON files under `.data/` (a persistent volume in production) |
+| Hosting | [Railway](https://railway.com), single Node.js service |
+| Tests | Node.js test runner with TypeScript stripping |
+
+## Implementation
+
+### 1. From PDF to reviewed assessment
+
+`lib/pdf.ts` extracts readable text page by page. Uploads are limited to **20 MB** and **400,000 extracted characters**. The server saves extracted pages and overlapping text chunks before requesting AI generation, so a failed AI call still leaves a reusable lecture source.
+
+`lib/extract.ts` generates structured concepts, assessment connections, questions, and lecture topic maps, with a server-side fallback for generation compatibility. Sanitization checks the output and omits source-page references outside the document. Generated material requires professor review; failed generation is reported explicitly rather than silently replaced with sample content.
+
+The lecture's **topic map** and the engine's **assessment connections** are separate structures. Topic maps explain the lecture visually; weighted assessment connections support tentative evidence propagation. Existing rooms without a topic map fall back to their concept connections.
+
+### 2. Adaptive question selection and evidence
+
+`lib/engine.ts` implements a three-question budget. It selects from approved, valid, unanswered questions using the sum of each tagged concept's priority:
+
+```text
+question score = Σ [concept importance × evidence factor / (1 + direct answer count)]
+```
+
+The evidence factor increases attention to negative inferred evidence and conflicting direct answers, and reduces attention to positive inferred evidence. These weights are illustrative heuristics, not a validated learning model.
+
+Each answer produces direct evidence for its tagged concepts. Evidence spreads **one hop, in either direction**, to connected concepts. An untested neighbor receives only the strongest connecting edge weight once per answer; evidence does not cascade through the graph.
+
+| Diagnostic label | Evidence used |
+| --- | --- |
+| Demonstrated strength | Correct direct answers, with no incorrect direct answers |
+| Needs review | Incorrect direct answers, with no correct direct answers |
+| Mixed evidence | Both correct and incorrect direct answers |
+| Tentative inference (+ / −) | Neighbor evidence only; the concept has not been tested directly |
+| Unknown | No direct or inferred evidence |
+
+Inference alone never becomes “Demonstrated strength.” The class dashboard's gap calculations use students with direct answers on a concept, keeping inferred evidence out of the denominator.
+
+### 3. Professor moderation and corrections
+
+Students can challenge a question from their results. Professors can revise it, correct the answer key, or invalidate it:
+
+- **Keep choices and re-grade:** use for answer-key corrections while preserving option positions. Saved choices are graded again against the current key.
+- **Clear answers:** use when rewriting a question so previous choices no longer apply.
+- **Invalidate:** preserve the answer history but remove the question's contribution to evidence and the three-question budget.
+
+Evidence is recomputed from valid saved responses, so removing a question removes its effect exactly. The dashboard retains crossed-out invalidated answers for context.
+
+### 4. Lecture-grounded study support
+
+After the diagnostic, the study helper receives concept descriptions, the student's diagnostic evidence, their own answered questions, and matching lecture excerpts with filenames and physical PDF page numbers. It is instructed to cite those excerpts and avoid inventing lecture citations. Unseen assessment questions are excluded from its prompt.
+
+`lib/sources.ts` retrieves bounded, keyword-ranked chunks; it does not use embeddings or vector search. Rooms without saved lecture sources use concept descriptions and the student's own answered questions. Generated practice questions do not change diagnostic evidence.
+
+The professor dashboard also summarizes recurring study-helper topics. Stored topic records use paraphrases and salted per-room student hashes; a topic is displayed only after at least two distinct students have asked about it.
+
+### 5. Persistence and caching
+
+| Location | Contents |
+| --- | --- |
+| `.data/db.json` | Rooms, concepts, questions, responses, challenges, and insights |
+| `.data/users.json` | Accounts, password salts, and password hashes |
+| `.data/sources/<source-id>.json` | Extracted lecture text, page boundaries, and overlapping chunks |
+
+Original PDF binaries are not retained. Identical extracted sources are deduplicated per professor. Room mutations are serialized within the running process.
+
+Parsed PDFs and generated drafts each use an in-memory cache with a **30-minute lifetime** and a maximum of **8 documents**. Identical concurrent requests share work, failures can retry, and returned drafts are independent copies. Draft cache keys account for source, model, prompt, schema, and credentials. Restarting the server clears these caches; saved source files remain on disk.
+
+## Getting started
+
+### Prerequisites
+
+- **Node.js 22.6+**, with support for `--experimental-strip-types` for the test command.
+- **npm**.
+- An **Anthropic API key** with access to the models configured in the code. The current model identifier is `claude-opus-5-5`; check `lib/extract.ts`, `lib/asked.ts`, and the chat/practice route handlers if your account requires a different model.
+- A PDF containing readable lecture text. Image-only scans need text extraction before upload; an OCR pipeline is not implemented here.
+
+### Install and configure
+
+```bash
+git clone https://github.com/Blessing27-oss/Sapient.git
+cd Sapient
+npm ci
+```
+
+Create or update your local `.env` with:
+
+```dotenv
+ANTHROPIC_API_KEY=your-anthropic-api-key
+SESSION_SECRET=your-long-random-session-secret
+```
+
+Generate a session secret with:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Keep these values local; `.env` files are excluded from Git. A configured `SESSION_SECRET` keeps session signing stable across server restarts. Without it, the application creates a process-local secret.
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:3000**. Local data directories are created when needed.
+
+### Demo walkthrough
+
+1. Sign up as a **Professor**. Your name is your login handle and must be unique, ignoring case.
+2. Open `/professor`, upload a lecture PDF, and wait for generation.
+3. Review the map, concepts, answer keys, and questions. Approve enough valid questions for a three-question diagnostic, then publish the room.
+4. In a separate browser profile, sign up as a **Student**, open `/student`, and enter the room code.
+5. Answer three questions and inspect the resulting concept map, evidence labels, study helper, and practice options.
+6. Challenge an answer, then return to `/dashboard/<code>` as the professor to review the class results and resolve the challenge.
+
+### Development commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm test` | Run engine, moderation, generation, graph, source, tutor, and related regression tests |
+| `npm run lint` | Run ESLint |
+| `npm run build` | Build the production application |
+| `npm start` | Serve the production build |
+
+## Deployment
+
+The live app runs at **https://sapient-production.up.railway.app**.
+
+It is hosted on Railway as one service, `sapient`, in the project of the same name, built from the repository with Railway's default Node.js builder (`npm run build`, then `npm start`).
+
+Sapient keeps its data as JSON files in `.data/`, so it needs a host with a persistent disk. Serverless platforms such as Vercel or Netlify have temporary or read-only filesystems and would lose rooms and accounts. On Railway, a persistent volume is mounted at `/app/.data`, so data survives redeploys and restarts.
+
+| Setting | Value |
+| --- | --- |
+| Service URL | `https://sapient-production.up.railway.app` |
+| Volume mount path | `/app/.data` |
+| Required variables | `ANTHROPIC_API_KEY`, `SESSION_SECRET` |
+
+Without `SESSION_SECRET`, the server generates a new signing secret on each start, which signs everyone out after every redeploy.
+
+### Redeploying
+
+Deploys are currently uploaded from a local checkout rather than triggered by GitHub pushes. To redeploy, run this from the project root:
+
+```bash
+npx @railway/cli login   # first time only
+npx @railway/cli link    # first time only: choose the sapient project and service
+npx @railway/cli up
+```
+
+`railway up` honors `.gitignore`, so your local `.env` and `.data/` are not uploaded. The production database starts separate from any local data.
+
+Useful commands:
+
+| Command | Purpose |
+| --- | --- |
+| `npx @railway/cli logs` | Show runtime logs |
+| `npx @railway/cli variable list` | List environment variables |
+| `npx @railway/cli variable set KEY --stdin` | Set a variable from standard input, keeping it out of shell history |
+| `npx @railway/cli volume list` | Show the volume and its usage |
+
+## Repository guide
+
+```text
+app/
+  professor/           PDF upload, map editing, and assessment review
+  student/             Room joining, diagnostic results, and study support
+  dashboard/[code]/    Professor class dashboard
+  api/                 Authentication, rooms, sources, generation, and tutoring
+components/            Graphs, topic maps, charts, practice, and chat UI
+lib/
+  engine.ts            Evidence updates, question selection, and class diagnostics
+  extract.ts           Structured AI generation and output sanitization
+  pdf.ts               PDF parsing and upload limits
+  sources.ts           Persistent lecture sources and chunk retrieval
+  moderate.ts          Question revision and correction logic
+  tutor.ts             Study-helper prompts and practice validation
+  asked.ts             Aggregated study-helper topic summaries
+  auth.ts / users.ts   Sessions and account storage
+  store.ts             Serialized room persistence
+  *.test.ts            Regression tests
+docs/images/           README figures
+```
+
+Source retrieval is available through `GET /api/rooms/<code>/sources?q=<question>` to the room owner or enrolled students. Signed-in professors can list their saved source metadata through `GET /api/sources`.
+
+## Team
+
+Contributors identified in this repository's Git history:
+
+| Member / Git author | GitHub |
+| --- | --- |
+| Godwin Kangor (`GodwinKangor`) | [@GodwinKangor](https://github.com/GodwinKangor) |
+| Blessing Ndeh (`Blessing Ndeh`, `Blessing27-oss`) | [@Blessing27-oss](https://github.com/Blessing27-oss) |
+| `Mitchellengare` | [@Mitchellengare](https://github.com/Mitchellengare) |
+
+Team roles and preferred display names are awaiting confirmation.
+
+## Current limits and next steps
+
+Sapient is a hackathon prototype. Three questions provide a small sample of understanding; the project has **not demonstrated that they accurately recover a student's knowledge state**. A useful next evaluation is a comparison against a fixed quiz, measuring gap detection and question efficiency.
+
+Local JSON storage suits a single-process demo; the Railway deployment keeps it on a persistent volume with one server instance. A real database and coordinated writes are needed before running multiple instances. Ephemeral/serverless filesystems do not provide that persistence. Older rooms without source IDs need a newly uploaded source and a newly published room for lecture-source retrieval.
+
+Professor signup is self-selected without institutional verification. AI-generated questions, explanations, and citations can be wrong and require review. Next steps include validating the diagnostic heuristics, strengthening account provisioning, and moving persistence to production storage.
