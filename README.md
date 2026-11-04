@@ -287,15 +287,11 @@ Source retrieval is available through `GET /api/rooms/<code>/sources?q=<question
 
 ## Team
 
-Contributors identified in this repository's Git history:
-
-| Member / Git author | GitHub |
-| --- | --- |
-| Godwin Kangor (`GodwinKangor`) | [@GodwinKangor](https://github.com/GodwinKangor) |
-| Blessing Ndeh (`Blessing Ndeh`, `Blessing27-oss`) | [@Blessing27-oss](https://github.com/Blessing27-oss) |
-| `Mitchellengare` | [@Mitchellengare](https://github.com/Mitchellengare) |
-
-Team roles and preferred display names are awaiting confirmation.
+| Member | Role | GitHub |
+| --- | --- | --- |
+| Godwin Kangor | Technical Lead, AI & Backend | [@GodwinKangor](https://github.com/GodwinKangor) |
+| Blessing Ndeh | Assessment Engine & Student Experience | [@Blessing27-oss](https://github.com/Blessing27-oss) |
+| Mitchellengare | Frontend & UI/UX Design | [@Mitchellengare](https://github.com/Mitchellengare) |
 
 ## Current limits and next steps
 

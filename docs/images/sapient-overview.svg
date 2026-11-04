@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
+<title id="title">Sapient: Every lecture, mapped.</title><desc id="desc">A lecture PDF becomes a professor reviewed map, an adaptive student diagnostic, and actionable class insights.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#053f2c"/><stop offset="1" stop-color="#102b25"/></linearGradient><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L8 3L0 6" fill="none" stroke="#88bca8" stroke-width="1.5"/></marker></defs>
+<rect width="1200" height="480" rx="24" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="60" y="80" fill="#9ed8bb" font-size="18" letter-spacing="5">SAPIENT</text><text x="60" y="144" fill="#fff" font-size="52" font-weight="700">Every lecture, mapped.</text><text x="60" y="186" fill="#c6dbd2" font-size="21">Professors build the map. Students find their place on it.</text>
+<g stroke="#88bca8" stroke-width="2" marker-end="url(#arrow)"><path d="M294 302H340"/><path d="M574 302H620"/><path d="M854 302H900"/></g>
+<g fill="#f6faf7"><rect x="60" y="238" width="234" height="128" rx="16"/><rect x="340" y="238" width="234" height="128" rx="16"/><rect x="620" y="238" width="234" height="128" rx="16"/><rect x="900" y="238" width="234" height="128" rx="16"/></g>
+<g fill="#00693e" font-size="14" font-weight="700"><text x="80" y="268">01 / SOURCE</text><text x="360" y="268">02 / REVIEW</text><text x="640" y="268">03 / DIAGNOSE</text><text x="920" y="268">04 / ACT</text></g>
+<g fill="#173b2e" font-size="22" font-weight="700"><text x="80" y="305">Lecture PDF</text><text x="360" y="305">Professor review</text><text x="640" y="305">Adaptive questions</text><text x="920" y="305">Class insights</text></g>
+<g fill="#526a60" font-size="15"><text x="80" y="337">Preserve page references</text><text x="360" y="337">Edit maps and approve</text><text x="640" y="337">Three-question diagnostic</text><text x="920" y="337">Review gaps and follow up</text></g>
+<text x="60" y="426" fill="#c6dbd2" font-size="16">Lecture-grounded learning · Visible evidence · Professor control</text></g></svg>
