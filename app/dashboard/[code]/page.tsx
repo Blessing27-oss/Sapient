@@ -209,7 +209,7 @@ function Dashboard({ code }: { code: string }) {
             </Panel>
           </div>
 
-          <Panel title="Lecture topic map" subtitle="Assessed concepts coloured from direct answers. Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet · pale with a light border: lecture context, not assessed.">
+          <Panel title="Lecture topic map" subtitle="Assessed concepts coloured from direct answers. Red: at least half of those asked missed it · amber: some missed · green: nobody missed · grey: not asked yet · white: lecture context, not assessed.">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
               {mapDraft ? (
                 <>
@@ -229,8 +229,8 @@ function Dashboard({ code }: { code: string }) {
             <TopicMapView title={d.room.title} map={shownMap} editor={mapDraft ? mapEditor : undefined}
               styleFor={(node) => {
                 const row = d.classRows.find((r) => r.conceptId === node.conceptId);
-                if (!row) return { fill: "#fafaf9", stroke: "#d6d3d1" };
-                return { fill: row.asked === 0 ? "#f5f5f4" : row.flag ? "#fca5a5" : row.missed > 0 ? "#fde68a" : "#86efac", stroke: "#78716c" };
+                if (!row) return { fill: "#ffffff", stroke: "#d6d3d1" };
+                return row.asked === 0 ? { fill: "#f5f5f4", stroke: "#a8a29e" } : row.flag ? { fill: "#fca5a5", stroke: "#dc2626" } : row.missed > 0 ? { fill: "#fde68a", stroke: "#d97706" } : { fill: "#86efac", stroke: "#16a34a" };
               }} />
             {mapDraft && <MapEditPanel map={mapDraft} selection={mapSel} onChange={setMapDraft} onClose={() => setMapSel(null)} />}
           </Panel>

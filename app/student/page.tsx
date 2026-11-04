@@ -295,7 +295,7 @@ function Results({ data, name, title, code, sid }: { data: Extract<Next, { done:
               selectedConceptId={selected} onSelectConcept={setSelected}
               styleFor={(node) => {
                 const diagnostic = data.diagnostic.find((d) => d.conceptId === node.conceptId);
-                return diagnostic ? { fill: LABEL_FILL[diagnostic.label], stroke: LABEL_ACCENT[diagnostic.label], dashed: diagnostic.label.startsWith("tentative") } : { fill: "#fafaf9", stroke: "#d6d3d1" };
+                return diagnostic ? { fill: LABEL_FILL[diagnostic.label], stroke: LABEL_ACCENT[diagnostic.label], dashed: diagnostic.label.startsWith("tentative") } : { fill: "#ffffff", stroke: "#d6d3d1" };
               }} />
             <div className="flex flex-wrap gap-2 text-xs">
               {(Object.keys(LABEL_FILL) as Label[]).map((l) => (

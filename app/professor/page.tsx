@@ -245,10 +245,11 @@ function Workspace() {
           <TopicMapView title={draft.title} map={map} editor={editor}
             styleFor={(n) => {
               const c = draft.concepts.find((x) => x.id === n.conceptId);
-              if (!c) return { fill: "#fafaf9", stroke: "#d6d3d1" };
-              return { fill: c.foundational ? "#dcfce7" : "#ffffff", stroke: "#78716c", dashed: !c.verified };
+              // Assessed concepts take their branch colour; lecture context is white with a coloured border.
+              if (!c) return { fill: "#ffffff" };
+              return { dashed: !c.verified, badge: c.foundational ? "#00693e" : undefined };
             }}
-            legend={<span>Bordered boxes are assessed concepts (dashed = not yet verified) · grey boxes are lecture context</span>} />
+            legend={<span>Coloured boxes are assessed concepts (dashed border = not yet verified, green dot = foundational) · white boxes are lecture context</span>} />
           <p className="text-xs text-stone-500">
             <b>Click</b> a box or arrow to edit it in the panel · <b>drag</b> a box to move it · hover a box or arrow and click its red <b>✕</b> to delete it · <b>double-click</b> a box to rename it · <b>double-click</b> empty space (or use + Add node) to add one · drag a box’s green <b>+</b> onto another box to draw an arrow · <b>Delete</b> removes the selection.
           </p>

@@ -3,6 +3,7 @@ import dagre, { type Graph } from "@dagrejs/dagre";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { type CrossRef, crossRefs, sectionConnections } from "@/lib/topicMap";
 import type { MapEdge, MapNode, MapSection, TopicMap } from "@/lib/types";
+import { PALETTE } from "@/lib/ui";
 
 export type NodeStyle = { fill?: string; stroke?: string; dashed?: boolean; badge?: string };
 type Spot = { sectionId: string; nodeId: string };
@@ -167,24 +168,54 @@ function GraphSvg(props: GraphProps) {
   );
 }
 
+// The landing page's look: each branch under a graph's top node gets its own palette colour (pastel fill,
+// coloured border and arrows); the top node is solid green. Red/amber/orange are left out so they never
+// read as the dashboard's "missed" colours.
+const BRANCH = [0, 4, 5, 3, 8, 9, 1].map((i) => PALETTE[i]);
+type Colour = { fill: string; accent: string };
+function branchColours(laid: Laid) {
+  const kids = new Map<string, string[]>(), hasParent = new Set<string>();
+  for (const l of laid.lines) { kids.set(l.source, [...(kids.get(l.source) ?? []), l.target]); hasParent.add(l.target); }
+  const roots = new Set(laid.boxes.map((b) => b.node.id).filter((id) => !hasParent.has(id) && kids.get(id)?.length));
+  const colour = new Map<string, Colour>();
+  let next = 0;
+  for (const r of roots) for (const k of kids.get(r)!) {
+    if (colour.has(k) || roots.has(k)) continue;
+    const c = BRANCH[next++ % BRANCH.length];
+    const queue = [k];
+    colour.set(k, c);
+    while (queue.length) for (const m of kids.get(queue.shift()!) ?? []) if (!colour.has(m) && !roots.has(m)) { colour.set(m, c); queue.push(m); }
+  }
+  for (const b of laid.boxes) if (!roots.has(b.node.id) && !colour.has(b.node.id)) colour.set(b.node.id, BRANCH[next++ % BRANCH.length]);
+  return { colour, roots };
+}
+const GREEN = "#00693e";
+
 function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNodeClick, onHover, onChip, chipLabel, allClickable, selectedEdge, onEdgeClick, onNodeDoubleClick, hideLabel, nodeExtra, edgeExtra, onEdgeHover, onNodePointerDown }: GraphProps) {
   const marker = useId().replace(/:/g, "");
+  const { colour, roots } = branchColours(laid);
+  // An arrow takes the colour of the branch it leads into, as on the landing page.
+  const edgeColour = (l: Line) => (roots.has(l.target) ? GREEN : colour.get(l.target)?.accent ?? GREEN);
+  const arrowColours = [...new Set([GREEN, CROSS, ...laid.lines.map(edgeColour)])];
+  const arrowId = (c: string) => `${marker}-${arrowColours.indexOf(c)}`;
   return (
     <>
       <defs>
-        <marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="#57534e" />
-        </marker>
-        <marker id={`${marker}s`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill={CROSS} />
-        </marker>
+        {arrowColours.map((c) => (
+          <marker key={c} id={arrowId(c)} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill={c} />
+          </marker>
+        ))}
+        <linearGradient id={`${marker}-fold`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="20" y2="9" spreadMethod="reflect">
+          <stop offset="0" stopColor="#00693e" /><stop offset="0.4" stopColor="#00693e" /><stop offset="0.6" stopColor="#16895c" /><stop offset="1" stopColor="#16895c" />
+        </linearGradient>
       </defs>
       {laid.lines.map((l, i) => (
         <g key={i} className={onEdgeClick ? "cursor-pointer" : undefined} onClick={onEdgeClick && ((e) => { e.stopPropagation(); onEdgeClick(i); })}
           onPointerEnter={onEdgeHover && (() => onEdgeHover(i))} onPointerLeave={onEdgeHover && (() => onEdgeHover(null))}>
           {onEdgeClick && <path d={l.d} fill="none" stroke="transparent" strokeWidth={16} />}
-          <path d={l.d} fill="none" stroke={selectedEdge === i ? CROSS : "#57534e"} strokeWidth={selectedEdge === i ? 3 : 1.4}
-            strokeDasharray={l.style === "dotted" ? "4 4" : undefined} markerEnd={arrows ? `url(#${marker}${selectedEdge === i ? "s" : ""})` : undefined} />
+          <path d={l.d} fill="none" stroke={selectedEdge === i ? CROSS : edgeColour(l)} strokeWidth={selectedEdge === i ? 3.2 : 2} strokeLinecap="round"
+            strokeDasharray={l.style === "dotted" ? "5 5" : undefined} markerEnd={arrows ? `url(#${arrowId(selectedEdge === i ? CROSS : edgeColour(l))})` : undefined} />
           {l.label && (
             <g transform={`translate(${l.lx},${l.ly})`}>
               <rect x={-l.lw / 2} y={-9} width={l.lw} height={18} rx={4} fill="#fafaf9" stroke="#e7e5e4" />
@@ -201,19 +232,24 @@ function GraphContent({ laid, arrows = true, styleFor, isSelected, isLit, onNode
         const clickable = !!onNodeClick && (allClickable || !!b.node.conceptId);
         const top = b.y - b.h / 2;
         const hidden = hideLabel?.(b.node);
+        const root = roots.has(b.node.id) && !st.fill; // a status colour (dashboard, student) wins over the green top node
+        const col = colour.get(b.node.id) ?? { fill: "#ffffff", accent: GREEN };
         return (
           <g key={b.node.id} onPointerEnter={onHover && (() => onHover(b.node))} onPointerLeave={onHover && (() => onHover(null))}>
             <g className={onNodePointerDown ? "cursor-grab" : clickable ? "cursor-pointer" : undefined} onClick={clickable ? (e) => { e.stopPropagation(); onNodeClick!(b.node); } : undefined}
               onPointerDown={onNodePointerDown && ((e) => onNodePointerDown(e, b))}
-              onDoubleClick={onNodeDoubleClick && ((e) => { e.stopPropagation(); onNodeDoubleClick(b.node); })} opacity={hidden ? 0.35 : 1}>
-              <rect x={b.x - b.w / 2} y={top} width={b.w} height={b.h} rx={8}
-                fill={st.fill ?? "#ffffff"} stroke={lit ? "#d97706" : selected ? CROSS : st.stroke ?? "#a8a29e"}
-                strokeWidth={lit || selected ? 3 : 1.3} strokeDasharray={st.dashed && !lit ? "5 3" : undefined} />
+              onDoubleClick={onNodeDoubleClick && ((e) => { e.stopPropagation(); onNodeDoubleClick(b.node); })} opacity={hidden ? 0.35 : 1}
+              style={{ filter: "drop-shadow(0 2px 3px rgba(28,25,23,.18))" }}>
+              {/* Pill for a one-line box, the same rounding for taller boxes with details. */}
+              <rect x={b.x - b.w / 2} y={top} width={b.w} height={b.h} rx={Math.min(18, b.h / 2)}
+                fill={st.fill ?? (root ? `url(#${marker}-fold)` : col.fill)}
+                stroke={lit ? "#d97706" : selected ? "#1c1917" : st.stroke ?? (root ? GREEN : col.accent)}
+                strokeWidth={lit || selected ? 3 : 2} strokeDasharray={st.dashed && !lit ? "6 4" : undefined} />
               {b.label.map((l, i) => (
-                <text key={`l${i}`} x={b.x} y={top + PAD_Y + 12 + i * LABEL_LH} textAnchor="middle" fontSize={13} fontWeight={650} fill="#1c1917">{l}</text>
+                <text key={`l${i}`} x={b.x} y={top + PAD_Y + 12 + i * LABEL_LH} textAnchor="middle" fontSize={13} fontWeight={700} fill={root ? "#ffffff" : "#1c1917"}>{l}</text>
               ))}
               {b.details.map((l, i) => (
-                <text key={`d${i}`} x={b.x} y={top + PAD_Y + 12 + b.label.length * LABEL_LH + 4 + i * DETAIL_LH} textAnchor="middle" fontSize={11.5} fill="#44403c">{l}</text>
+                <text key={`d${i}`} x={b.x} y={top + PAD_Y + 12 + b.label.length * LABEL_LH + 4 + i * DETAIL_LH} textAnchor="middle" fontSize={11.5} fill={root ? "#e3f1eb" : "#44403c"}>{l}</text>
               ))}
               {st.badge && <circle cx={b.x + b.w / 2 - 7} cy={top + 7} r={4} fill={st.badge} />}
             </g>
