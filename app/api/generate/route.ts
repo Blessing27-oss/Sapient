@@ -1,6 +1,6 @@
 import { sourceStore } from "@/lib/sources";
 import type { SavedSource } from "@/lib/sources";
-import { currentUser, requireProfessor } from "@/lib/auth";
+import { currentUser, denyDemo, requireProfessor } from "@/lib/auth";
 import Anthropic from "@anthropic-ai/sdk";
 import { UnusableDraftError, extract } from "@/lib/extract";
 import { MAX_PDF_BYTES, parsePDF } from "@/lib/pdf";
@@ -11,8 +11,10 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   const deny = await requireProfessor();
   if (deny) return deny;
-  const form = await req.formData();
   const user = (await currentUser())!;
+  const demoDeny = denyDemo(user);
+  if (demoDeny) return demoDeny;
+  const form = await req.formData();
   const savedId = form.get("sourceId");
   let source: SavedSource;
   if (typeof savedId === "string" && savedId) {

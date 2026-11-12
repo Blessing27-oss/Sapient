@@ -1,4 +1,4 @@
-import { currentUser, requireProfessor } from "@/lib/auth";
+import { currentUser, denyDemo, requireProfessor } from "@/lib/auth";
 import { sourceStore } from "@/lib/sources";
 import { questionProblems } from "@/lib/questions";
 import { createRoom } from "@/lib/store";
@@ -8,6 +8,8 @@ export async function POST(req: Request) {
   const deny = await requireProfessor();
   if (deny) return deny;
   const user = (await currentUser())!;
+  const demoDeny = denyDemo(user);
+  if (demoDeny) return demoDeny;
   const b = await req.json();
   const sourceIds: string[] = [];
   if (b.sourceId !== undefined) {
