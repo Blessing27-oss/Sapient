@@ -1,14 +1,13 @@
 import { requireStudent } from "@/lib/auth";
 import { isLive } from "@/lib/questions";
-import { withDB } from "@/lib/store";
+import { withRoom } from "@/lib/store";
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const auth = await requireStudent();
   if ("deny" in auth) return auth.deny;
   const { code } = await params;
   const { studentId, questionId, choice } = await req.json();
-  const res = await withDB((db) => {
-    const room = db[code.toUpperCase()];
+  const res = await withRoom(code, (room) => {
     const s = room?.students.find((x) => x.id === studentId && x.userId === auth.user.id);
     const q = room?.questions.find((x) => x.id === questionId && isLive(x));
     if (!room || !s || !q) return null;

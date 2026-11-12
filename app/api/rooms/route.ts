@@ -1,7 +1,7 @@
 import { currentUser, requireProfessor } from "@/lib/auth";
 import { sourceStore } from "@/lib/sources";
 import { questionProblems } from "@/lib/questions";
-import { newCode, withDB } from "@/lib/store";
+import { createRoom } from "@/lib/store";
 import type { Room } from "@/lib/types";
 
 export async function POST(req: Request) {
@@ -20,11 +20,7 @@ export async function POST(req: Request) {
   const questions = ((b.questions ?? []) as Room["questions"])
     .filter((q) => !seen.has(q.id) && (seen.add(q.id), true))
     .map((q) => ({ ...q, approved: !!q.approved && !questionProblems(q, conceptIds).length, invalidated: false }));
-  const code = await withDB((db) => {
-    const code = newCode(db);
-    db[code] = { code, ownerId: user.id, sourceIds, topicMap: b.topicMap, title: b.title, concepts: b.concepts, edges: b.edges, layout: validLayout(b.layout), questions, students: [], challenges: [], insights: [] };
-    return code;
-  });
+  const code = await createRoom((code) => ({ code, ownerId: user.id, sourceIds, topicMap: b.topicMap, title: b.title, concepts: b.concepts, edges: b.edges, layout: validLayout(b.layout), questions, students: [], challenges: [], insights: [] }));
   return Response.json({ code });
 }
 

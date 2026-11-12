@@ -1,5 +1,5 @@
 import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
-import { withDB } from "@/lib/store";
+import { withRoom } from "@/lib/store";
 import { reviseQuestion } from "@/lib/moderate";
 import type { QuestionPatch, RevisionMode } from "@/lib/moderate";
 
@@ -12,8 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     questionId: string; action: "invalidate" | "revise" | "dismiss"; patch?: QuestionPatch; mode?: RevisionMode;
   };
   if (!["invalidate", "revise", "dismiss"].includes(action)) return Response.json({ error: "Unknown action" }, { status: 400 });
-  const result = await withDB((db) => {
-    const room = db[code.toUpperCase()];
+  const result = await withRoom(code, (room) => {
     const q = room?.questions.find((x) => x.id === questionId);
     if (!room || !q || !ownsRoom(room, user)) return { error: "Not found", status: 404 };
     if (action === "revise") {

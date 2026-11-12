@@ -1,5 +1,5 @@
 import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
-import { withDB } from "@/lib/store";
+import { withRoom } from "@/lib/store";
 import { cleanSavedTopicMap } from "@/lib/topicMap";
 
 // The room owner edits the lecture map after publishing. Only the map changes: concepts, assessment
@@ -10,8 +10,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const user = await currentUser();
   const { code } = await params;
   const { topicMap } = await req.json();
-  const result = await withDB((db) => {
-    const room = db[code.toUpperCase()];
+  const result = await withRoom(code, (room) => {
     if (!room || !ownsRoom(room, user)) return "missing" as const;
     const cleaned = cleanSavedTopicMap(topicMap, new Set(room.concepts.map((c) => c.id)));
     if (!cleaned) return "invalid" as const;
