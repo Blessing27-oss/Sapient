@@ -52,6 +52,8 @@ export type Room = {
   // Anonymous record of what students ask the study helper: a paraphrased topic, never their wording or name.
   asked?: AskedTopic[];
   askSalt?: string;
+  // Set on the shared demo room: when it was last (re)seeded.
+  demoSeededAt?: number;
 };
 // asker: a salted per-room hash, used only to count distinct students; never shown or reversible to a name.
 export type AskedTopic = { asker: string; conceptIds: string[]; topic: string };
