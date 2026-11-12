@@ -1,18 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { openDatabase } from "./db.ts";
 import { createSourceStore, chunkPages, retrieveSourceChunks, canReadRoomSources } from "./sources.ts";
 import { SAMPLE } from "./sample.ts";
 
 test("sources survive new store instances, deduplicate within an owner, and stay private", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "sapient-sources-"));
+  const db = await openDatabase();
   try {
-    const store = createSourceStore(dir);
+    const store = createSourceStore(async () => db);
     const saved = await store.save("owner", "lecture.pdf", ["Tooth comb", "", "Grooming claw"]);
     assert.equal((await store.save("owner", "same.pdf", saved.pages)).id, saved.id);
-    const reopened = createSourceStore(dir);
+    const reopened = createSourceStore(async () => db);
     assert.deepEqual((await reopened.read(saved.id, "owner"))?.pages, saved.pages);
     assert.equal(await reopened.read(saved.id, "other"), undefined);
     assert.equal(await reopened.read("../../users", "owner"), undefined);
@@ -24,7 +22,7 @@ test("sources survive new store instances, deduplicate within an owner, and stay
     assert.equal(hits[0].page, 3);
     assert.equal(hits[0].filename, "lecture.pdf");
     assert.deepEqual(retrieveSourceChunks([saved], "unrelated"), []);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally { await db.close(); }
 });
 
 test("chunks preserve every page's text and retrieval respects the context budget", () => {

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash, randomBytes } from "node:crypto";
-import { getRoom, withDB } from "./store.ts";
+import { getRoom, withRoom } from "./store.ts";
 import type { AskedTopic, Room } from "./types.ts";
 
 // A topic appears on the dashboard only once this many different students have asked about it,
@@ -56,8 +56,7 @@ export async function recordQuestion(code: string, studentId: string, question: 
   if (!room) return;
   const tagged = await tagQuestion(room, question);
   if (!tagged) return;
-  await withDB((db) => {
-    const r = db[code.toUpperCase()];
+  await withRoom(code, (r) => {
     if (!r) return;
     r.askSalt ??= randomBytes(16).toString("hex");
     (r.asked ??= []).push({ asker: askerKey(r.askSalt, studentId), ...tagged });

@@ -1,6 +1,6 @@
 import { currentUser, ownsRoom, requireProfessor } from "@/lib/auth";
 import { isLive, questionProblems } from "@/lib/questions";
-import { withDB } from "@/lib/store";
+import { withRoom } from "@/lib/store";
 import type { Question } from "@/lib/types";
 
 // The professor edits the room's unanswered questions. Questions students have already answered are locked
@@ -11,8 +11,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const user = await currentUser();
   const { code } = await params;
   const { questions } = (await req.json()) as { questions: Question[] };
-  const result = await withDB((db) => {
-    const room = db[code.toUpperCase()];
+  const result = await withRoom(code, (room) => {
     if (!room || !ownsRoom(room, user)) return null;
     const answered = new Set(room.students.flatMap((s) => s.responses.map((r) => r.questionId)));
     const conceptIds = room.concepts.map((c) => c.id);
