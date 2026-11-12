@@ -1,6 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { createHash } from "node:crypto";
+import { getDatabase, type Database } from "./db.ts";
 import type { Room } from "./types.ts";
 
 export type SourceChunk = { id: string; page: number; text: string };
@@ -22,46 +21,38 @@ export function chunkPages(pages: string[]): SourceChunk[] {
   });
 }
 
-// Atomic file replacement prevents readers from seeing a partially written document.
-// Files live on the server, never under public/; each lookup enforces the source owner.
-export function createSourceStore(directory: string) {
+type SourceRow = { id: string; owner_id: string; filename: string; pages: string[]; chunks: SourceChunk[]; created_at: string | number };
+const fromRow = (r: SourceRow): SavedSource => ({ id: r.id, ownerId: r.owner_id, filename: r.filename, pages: r.pages, chunks: r.chunks, createdAt: Number(r.created_at) });
+
+// Every lookup is scoped to the owner, so one professor can never read another's lecture text.
+export function createSourceStore(db: () => Promise<Database>) {
   const read = async (id: string, ownerId: string): Promise<SavedSource | undefined> => {
     if (!/^[a-f0-9]{64}$/.test(id)) return undefined;
-    try {
-      const source: SavedSource = JSON.parse(await fs.readFile(path.join(directory, `${id}.json`), "utf8"));
-      return source.ownerId === ownerId ? source : undefined;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw error;
-    }
+    const [row] = await (await db()).query<SourceRow>(
+      "SELECT id, owner_id, filename, pages, chunks, created_at FROM sources WHERE id = $1 AND owner_id = $2", [id, ownerId]);
+    return row && fromRow(row);
   };
   return {
     read,
     async save(ownerId: string, filename: string, pages: string[]): Promise<SavedSource> {
       if (!ownerId || !pages.some((page) => page.trim()) || pages.join("").length > 400_000) throw new Error("Source text must be readable and under 400,000 characters.");
       const id = createHash("sha256").update(JSON.stringify({ ownerId, pages })).digest("hex");
-      const existing = await read(id, ownerId);
-      if (existing) return existing;
-      const source: SavedSource = { id, ownerId, filename: filename.slice(0, 200), pages: [...pages], chunks: chunkPages(pages), createdAt: Date.now() };
-      await fs.mkdir(directory, { recursive: true });
-      const temporary = path.join(directory, `${id}.${randomUUID()}.tmp`);
-      try {
-        await fs.writeFile(temporary, JSON.stringify(source), { mode: 0o600 });
-        await fs.rename(temporary, path.join(directory, `${id}.json`));
-      } finally { await fs.rm(temporary, { force: true }); }
-      return source;
+      // Same owner + same text hashes to the same id: keep the first upload.
+      await (await db()).query(
+        "INSERT INTO sources (id, owner_id, filename, pages, chunks, created_at) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6) ON CONFLICT (id) DO NOTHING",
+        [id, ownerId, filename.slice(0, 200), JSON.stringify(pages), JSON.stringify(chunkPages(pages)), Date.now()],
+      );
+      return (await read(id, ownerId))!;
     },
     async list(ownerId: string): Promise<SourceSummary[]> {
-      let files: string[];
-      try { files = await fs.readdir(directory); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
-      const sources = await Promise.all(files.filter((f) => /^[a-f0-9]{64}\.json$/.test(f)).map((f) => read(f.slice(0, -5), ownerId)));
-      return sources.filter((s): s is SavedSource => !!s).map((s) => ({ id: s.id, filename: s.filename, createdAt: s.createdAt, pageCount: s.pages.length })).sort((a, b) => b.createdAt - a.createdAt);
+      const rows = await (await db()).query<{ id: string; filename: string; created_at: string | number; page_count: number }>(
+        "SELECT id, filename, created_at, jsonb_array_length(pages) AS page_count FROM sources WHERE owner_id = $1 ORDER BY created_at DESC", [ownerId]);
+      return rows.map((r) => ({ id: r.id, filename: r.filename, createdAt: Number(r.created_at), pageCount: r.page_count }));
     },
   };
 }
 
-export const sourceStore = createSourceStore(path.join(process.cwd(), ".data", "sources"));
+export const sourceStore = createSourceStore(getDatabase);
 
 type Reader = { id: string; role: "professor" | "student" };
 export function canReadRoomSources(room: Room, user: Reader): boolean {
