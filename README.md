@@ -4,7 +4,7 @@
 
 <p align="center"><strong>Find what students don't know, before the exam.</strong><br />A professor-controlled, AI-assisted lecture mapping and adaptive diagnostic platform.</p>
 
-<p align="center"><strong><a href="https://sapient-production.up.railway.app">Try the live app →</a></strong></p>
+<p align="center"><strong><a href="https://sapient-production.up.railway.app">Try the live app →</a></strong><br />No sign-up needed: choose <em>Try the demo as a professor</em> or <em>as a student</em> on the home page.</p>
 
 <p align="center">
   <a href="#hackathon">Dartmouth AI @ 70</a> ·
@@ -211,7 +211,16 @@ npm run dev
 
 Open **http://localhost:3000**. Without `DATABASE_URL`, the embedded database is created in `.data/pglite` on first request and migrated automatically.
 
-### Demo walkthrough
+### Demo mode
+
+The home and sign-in pages offer a one-click demo:
+
+- **As a professor** signs you in to a shared demo account and opens the class dashboard for room `DEMO`. That room holds the sample Fourier lesson, a topic map, and 16 simulated students. Their answers come from the real adaptive engine with a fixed random seed. The class shows a planted weakness in convolution, two open challenges, and anonymized study-helper topics.
+- **As a student** creates a disposable guest account, enrolls it in `DEMO`, and starts the three-question diagnostic. Your answers then appear on the demo professor's dashboard.
+
+Visitors can edit anything in the demo. The room resets to its seeded state when it's more than 6 hours old (checked whenever someone enters the demo), and guest accounts are deleted after 24 hours. Demo accounts have no password and can't upload PDFs or create rooms, so visitors can't spend API credits generating lectures. They can still use the study helper and practice questions. The logic is in `lib/demo.ts` and `POST /api/demo`.
+
+### Full walkthrough
 
 1. Sign up as a **Professor**. Your name is your login handle and must be unique, ignoring case.
 2. Open `/professor`, upload a lecture PDF, and wait for generation.
@@ -299,6 +308,7 @@ lib/
   db.ts                Postgres/PGlite driver wrapper and schema migrations
   store.ts             Room storage with row-level locking
   importJson.ts        One-time import of the legacy JSON data
+  demo.ts              Seeded demo class, resets, and guest accounts
   *.test.ts            Regression tests
 docs/images/           README figures
 scripts/import-json.ts One-time legacy data import (npm run db:import)
