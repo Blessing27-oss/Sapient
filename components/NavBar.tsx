@@ -4,7 +4,7 @@ import Lockup from "@/components/Lockup";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type User = { name: string; role: "professor" | "student" };
+type User = { name: string; role: "professor" | "student"; demo?: boolean };
 
 export default function NavBar() {
   const pathname = usePathname();
@@ -45,6 +45,15 @@ export default function NavBar() {
           )}
         </nav>
       </div>
+      {user?.demo && (
+        <p className="border-t border-amber-200 bg-amber-50 px-6 py-2 text-center text-sm text-amber-900">
+          You’re using a demo account. The demo class resets every few hours.{" "}
+          <button onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/login"); router.refresh(); }} className="font-semibold underline">
+            Create a free account
+          </button>{" "}
+          to upload your own lecture.
+        </p>
+      )}
     </header>
   );
 }

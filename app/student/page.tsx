@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TopicMapView from "@/components/TopicMapView";
 import { fallbackTopicMap } from "@/lib/topicMap";
@@ -67,6 +67,14 @@ function StudentInner() {
     setNext(j);
     return j;
   }, []);
+
+  // Demo links (?code=DEMO&join=1) skip the join screen.
+  const autoJoin = useRef(sp.get("join") === "1" && code.length === 4);
+  useEffect(() => {
+    if (!autoJoin.current) return;
+    autoJoin.current = false;
+    void join(code);
+  });
 
   // Keep results live so a professor's invalidation shows up without a refresh.
   useEffect(() => {

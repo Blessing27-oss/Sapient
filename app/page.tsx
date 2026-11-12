@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DemoButtons from "@/components/DemoButtons";
 import LandingIntro from "@/components/LandingIntro";
 import TwoTone from "@/components/TwoTone";
 import { PALETTE } from "@/lib/ui";
@@ -83,6 +84,7 @@ export default function Home() {
             <Link href="/professor" className="btn !px-7 !py-3.5 !text-base">I’m a professor →</Link>
             <Link href="/student" className="btn-ghost !px-7 !py-3.5 !text-base">I’m a student</Link>
           </div>
+          <DemoButtons />
         </div>
         <div className="relative">
           <div className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-br from-[#e3f1eb]/70 via-transparent to-amber-100/60 blur-2xl" />
