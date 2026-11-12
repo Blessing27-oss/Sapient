@@ -74,7 +74,7 @@ flowchart TB
         RET[Keyword-ranked source retrieval]
     end
     AI[Anthropic API]
-    DB[(Local JSON stores)]
+    DB[(PostgreSQL)]
     P --> API
     S --> API
     D --> API
@@ -100,7 +100,7 @@ flowchart TB
 | PDF extraction | `unpdf`, processed locally with original page boundaries |
 | Graph visualization | SVG/React components and Dagre layout |
 | Authentication | Salted scrypt password hashes and HMAC-signed session cookies |
-| Persistence | Local JSON files under `.data/` (a persistent volume in production) |
+| Persistence | PostgreSQL via `pg` in production; embedded [PGlite](https://pglite.dev) (Postgres compiled to WASM) for local development and tests |
 | Hosting | [Railway](https://railway.com), single Node.js service |
 | Tests | Node.js test runner with TypeScript stripping |
 
@@ -156,15 +156,20 @@ The professor dashboard also summarizes recurring study-helper topics. Stored to
 
 ### 5. Persistence and caching
 
-| Location | Contents |
+`lib/db.ts` gives the stores one query and transaction interface over two drivers. When `DATABASE_URL` is set, it uses node-postgres. Otherwise it uses PGlite, an embedded Postgres stored in `.data/pglite`, so running locally or testing needs no database server. Schema changes are versioned migrations that run at startup under an advisory lock.
+
+| Table | Contents |
 | --- | --- |
-| `.data/db.json` | Rooms, concepts, questions, responses, challenges, and insights |
-| `.data/users.json` | Accounts, password salts, and password hashes |
-| `.data/sources/<source-id>.json` | Extracted lecture text, page boundaries, and overlapping chunks |
+| `rooms` | One JSONB document per room (concepts, questions, responses, challenges, insights), plus owner and title columns for lookups |
+| `room_members` | Which accounts joined which rooms, so a student's room list is an indexed query |
+| `users` | Accounts, password salts, and password hashes; `username` is `UNIQUE` |
+| `sources` | Extracted lecture text, page boundaries, and overlapping chunks |
 
-Original PDF binaries are not retained. Identical extracted sources are deduplicated per professor. Room mutations are serialized within the running process.
+Every room change runs `withRoom(code, fn)`: a transaction that locks the room's row (`SELECT … FOR UPDATE`), applies the change, and writes the room back only if it changed. Concurrent answers to the same room are therefore applied one after another, even across several server instances. Room codes and usernames are claimed through primary-key and unique constraints, so concurrent requests cannot both get the same one.
 
-Parsed PDFs and generated drafts each use an in-memory cache with a **30-minute lifetime** and a maximum of **8 documents**. Identical concurrent requests share work, failures can retry, and returned drafts are independent copies. Draft cache keys account for source, model, prompt, schema, and credentials. Restarting the server clears these caches; saved source files remain on disk.
+Original PDF binaries are not retained. Identical extracted sources are deduplicated per professor.
+
+Parsed PDFs and generated drafts each use an in-memory cache with a **30-minute lifetime** and a maximum of **8 documents**. Identical concurrent requests share work, failures can retry, and returned drafts are independent copies. Draft cache keys account for source, model, prompt, schema, and credentials. Restarting the server clears these caches; saved sources remain in the database.
 
 ## Getting started
 
@@ -188,6 +193,8 @@ Create or update your local `.env` with:
 ```dotenv
 ANTHROPIC_API_KEY=your-anthropic-api-key
 SESSION_SECRET=your-long-random-session-secret
+# Optional: use a Postgres server instead of the embedded database in .data/pglite
+# DATABASE_URL=postgres://user:password@localhost:5432/sapient
 ```
 
 Generate a session secret with:
@@ -202,7 +209,7 @@ Keep these values local; `.env` files are excluded from Git. A configured `SESSI
 npm run dev
 ```
 
-Open **http://localhost:3000**. Local data directories are created when needed.
+Open **http://localhost:3000**. Without `DATABASE_URL`, the embedded database is created in `.data/pglite` on first request and migrated automatically.
 
 ### Demo walkthrough
 
@@ -222,6 +229,7 @@ Open **http://localhost:3000**. Local data directories are created when needed.
 | `npm run lint` | Run ESLint |
 | `npm run build` | Build the production application |
 | `npm start` | Serve the production build |
+| `npm run db:import` | One-time copy of legacy JSON data (`.data/users.json`, `db.json`, `sources/`) into the database; safe to re-run |
 
 ## Deployment
 
@@ -229,13 +237,13 @@ The live app runs at **https://sapient-production.up.railway.app**.
 
 It is hosted on Railway as one service, `sapient`, in the project of the same name, built from the repository with Railway's default Node.js builder (`npm run build`, then `npm start`).
 
-Sapient keeps its data as JSON files in `.data/`, so it needs a host with a persistent disk. Serverless platforms such as Vercel or Netlify have temporary or read-only filesystems and would lose rooms and accounts. On Railway, a persistent volume is mounted at `/app/.data`, so data survives redeploys and restarts.
+In production, Sapient stores its data in a Railway PostgreSQL database. The service reads it from `DATABASE_URL`, set as a reference variable to `${{Postgres.DATABASE_URL}}`. Migrations run automatically on the first request after each deploy. Because all state lives in Postgres, the service doesn't need a persistent disk and can run more than one replica.
 
 | Setting | Value |
 | --- | --- |
 | Service URL | `https://sapient-production.up.railway.app` |
-| Volume mount path | `/app/.data` |
-| Required variables | `ANTHROPIC_API_KEY`, `SESSION_SECRET` |
+| Database | Railway PostgreSQL, connected via `DATABASE_URL` |
+| Required variables | `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `DATABASE_URL` |
 
 Without `SESSION_SECRET`, the server generates a new signing secret on each start, which signs everyone out after every redeploy.
 
@@ -258,7 +266,17 @@ Useful commands:
 | `npx @railway/cli logs` | Show runtime logs |
 | `npx @railway/cli variable list` | List environment variables |
 | `npx @railway/cli variable set KEY --stdin` | Set a variable from standard input, keeping it out of shell history |
-| `npx @railway/cli volume list` | Show the volume and its usage |
+| `npx @railway/cli connect Postgres` | Open a `psql` shell on the production database |
+
+### Moving existing data from the JSON volume
+
+Deployments from before the Postgres migration kept data in JSON files on a volume mounted at `/app/.data`. To copy it over once, add the Postgres service and `DATABASE_URL`, deploy, then run the importer inside the service, where the volume is mounted:
+
+```bash
+npx @railway/cli ssh -- npm run db:import -- /app/.data
+```
+
+The import runs in one transaction and skips rows that already exist. After you've confirmed the data in Postgres, you can detach the volume.
 
 ## Repository guide
 
@@ -273,14 +291,17 @@ lib/
   engine.ts            Evidence updates, question selection, and class diagnostics
   extract.ts           Structured AI generation and output sanitization
   pdf.ts               PDF parsing and upload limits
-  sources.ts           Persistent lecture sources and chunk retrieval
+  sources.ts           Lecture source storage and chunk retrieval
   moderate.ts          Question revision and correction logic
   tutor.ts             Study-helper prompts and practice validation
   asked.ts             Aggregated study-helper topic summaries
   auth.ts / users.ts   Sessions and account storage
-  store.ts             Serialized room persistence
+  db.ts                Postgres/PGlite driver wrapper and schema migrations
+  store.ts             Room storage with row-level locking
+  importJson.ts        One-time import of the legacy JSON data
   *.test.ts            Regression tests
 docs/images/           README figures
+scripts/import-json.ts One-time legacy data import (npm run db:import)
 ```
 
 Source retrieval is available through `GET /api/rooms/<code>/sources?q=<question>` to the room owner or enrolled students. Signed-in professors can list their saved source metadata through `GET /api/sources`.
@@ -297,6 +318,6 @@ Source retrieval is available through `GET /api/rooms/<code>/sources?q=<question
 
 Sapient is a hackathon prototype. Three questions provide a small sample of understanding; the project has **not demonstrated that they accurately recover a student's knowledge state**. A useful next evaluation is a comparison against a fixed quiz, measuring gap detection and question efficiency.
 
-Local JSON storage suits a single-process demo; the Railway deployment keeps it on a persistent volume with one server instance. A real database and coordinated writes are needed before running multiple instances. Ephemeral/serverless filesystems do not provide that persistence. Older rooms without source IDs need a newly uploaded source and a newly published room for lecture-source retrieval.
+Room data is stored as one JSONB document per room and locked as a whole while it's updated. That's simple and correct at classroom scale. For very large classes, splitting students and responses into their own tables would reduce lock contention. Older rooms without source IDs need a newly uploaded source and a newly published room for lecture-source retrieval.
 
-Professor signup is self-selected without institutional verification. AI-generated questions, explanations, and citations can be wrong and require review. Next steps include validating the diagnostic heuristics, strengthening account provisioning, and moving persistence to production storage.
+Professor signup is self-selected without institutional verification. AI-generated questions, explanations, and citations can be wrong and require review. Next steps include validating the diagnostic heuristics, strengthening account provisioning, and normalizing high-write room data into separate tables.
