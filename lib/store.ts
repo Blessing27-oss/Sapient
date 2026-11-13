@@ -63,6 +63,18 @@ export function createRoomStore(db: () => Promise<Database>) {
       throw new Error("Could not allocate a room code.");
     },
 
+    // Insert a room with a fixed code if that code is free; returns whether it was inserted.
+    async putRoom(room: Room): Promise<boolean> {
+      return (await db()).transaction(async (tx) => {
+        const rows = await tx.query(
+          "INSERT INTO rooms (code, owner_id, title, data) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (code) DO NOTHING RETURNING code",
+          [room.code, room.ownerId ?? null, room.title ?? "", JSON.stringify(room)],
+        );
+        if (rows.length) await syncMembers(tx, room);
+        return rows.length > 0;
+      });
+    },
+
     async listOwnedRooms(ownerId: string): Promise<Room[]> {
       const rows = await (await db()).query<{ data: Room }>("SELECT data FROM rooms WHERE owner_id = $1 ORDER BY created_at DESC", [ownerId]);
       return rows.map((r) => r.data);
@@ -77,5 +89,5 @@ export function createRoomStore(db: () => Promise<Database>) {
 }
 
 const rooms = createRoomStore(getDatabase);
-export const { getRoom, withRoom, createRoom, listOwnedRooms, listJoinedRooms } = rooms;
+export const { getRoom, withRoom, createRoom, putRoom, listOwnedRooms, listJoinedRooms } = rooms;
 export const uid = () => Math.random().toString(36).slice(2, 10);

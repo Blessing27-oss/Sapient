@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import DemoButtons from "@/components/DemoButtons";
 
 function LoginForm() {
   const router = useRouter();
@@ -51,6 +52,7 @@ function LoginForm() {
           {mode === "signin" ? "Create an account" : "Sign in"}
         </button>
       </p>
+      <DemoButtons className="border-t border-stone-200 pt-5 text-center" />
     </div>
   );
 }

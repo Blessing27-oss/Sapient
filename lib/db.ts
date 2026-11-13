@@ -61,6 +61,13 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX room_members_user_idx ON room_members (user_id);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Demo accounts (the shared demo professor and disposable guest students) have no password.
+      ALTER TABLE users ADD COLUMN demo boolean NOT NULL DEFAULT false;
+    `,
+  },
 ];
 
 // Arbitrary constant so concurrently starting instances apply migrations one at a time.

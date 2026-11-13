@@ -15,6 +15,7 @@ export function createUserStore(db: () => Promise<Database>) {
     async createUser(i: { name: string; password: string; role: Role }): Promise<User | { error: string }> {
       const username = norm(i.name);
       if (!username) return { error: "Enter your name." };
+      if (username.startsWith("demo:")) return { error: "That name is reserved. Try another." };
       if (i.password.length < 6) return { error: "Password must be at least 6 characters." };
       const salt = randomBytes(16).toString("hex");
       const user: User = { id: randomBytes(6).toString("hex"), name: i.name.trim().slice(0, 40), username, role: i.role, salt, hash: hash(i.password, salt) };
