@@ -2,6 +2,8 @@
   <img src="docs/images/sapient-overview.svg" alt="Sapient — Every lecture, mapped. A lecture PDF becomes a professor-reviewed map, adaptive questions, and class insights." width="100%" />
 </p>
 
+<p align="center"><a href="https://github.com/Blessing27-oss/Sapient/actions/workflows/ci.yml"><img src="https://github.com/Blessing27-oss/Sapient/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" /></a></p>
+
 <p align="center"><strong>Find what students don't know, before the exam.</strong><br />A professor-controlled, AI-assisted lecture mapping and adaptive diagnostic platform.</p>
 
 <p align="center"><strong><a href="https://sapient-production.up.railway.app">Try the live app →</a></strong><br />No sign-up needed: choose <em>Try the demo as a professor</em> or <em>as a student</em> on the home page.</p>
@@ -236,6 +238,7 @@ Visitors can edit anything in the demo. The room resets to its seeded state when
 | `npm run dev` | Start the development server |
 | `npm test` | Run engine, moderation, generation, graph, source, tutor, and related regression tests |
 | `npm run lint` | Run ESLint |
+| `npm run typecheck` | Type-check with `tsc --noEmit` |
 | `npm run build` | Build the production application |
 | `npm start` | Serve the production build |
 | `npm run db:import` | One-time copy of legacy JSON data (`.data/users.json`, `db.json`, `sources/`) into the database; safe to re-run |
@@ -286,6 +289,10 @@ npx @railway/cli ssh -- npm run db:import -- /app/.data
 ```
 
 The import runs in one transaction and skips rows that already exist. After you've confirmed the data in Postgres, you can detach the volume.
+
+### Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, type-check, tests and a production build on every pull request and every push to `main`. The database tests use embedded PGlite, so CI needs no Postgres service or secrets.
 
 ## Repository guide
 
